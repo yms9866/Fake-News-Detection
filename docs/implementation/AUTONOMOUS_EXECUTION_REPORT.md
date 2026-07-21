@@ -416,3 +416,130 @@ Remaining risks:
 - Camera/microphone/display capture are adapter-tested with permission-denial doubles rather than real browser devices.
 - Auth is a development shell with PKCE-shaped primitives, not production OIDC.
 - Review and administration are shells for later RBAC/tenant work in Slice 9.
+
+## Slice 8 - Mobile Application
+
+Date: 2026-07-22
+
+Baseline:
+
+- Branch: `staging`
+- Starting commit: `b4c7455 feat: implement slice 7 web application`
+- Starting tag: `slice-7-complete`
+
+Plan:
+
+1. Preserve Slice 1-7 behavior.
+2. Add a React Native-shaped mobile package under `apps/mobile` using the existing pnpm workspace.
+3. Use shared API contracts and backend endpoints; do not duplicate analysis or verdict logic.
+4. Add platform adapters for camera, gallery, microphone, audio/video selection, screenshot, Android share intent, iOS share extension, deep links, permission denial, and capture revocation.
+5. Add offline queue, background upload resume abstraction, completion notification, secure settings, auth token abstraction, and remote logout abstraction.
+6. Add deterministic mobile tests and report missing SDKs honestly.
+7. Run all Slice 1-8 gates.
+
+Implemented:
+
+- `apps/mobile` package with deterministic build, typecheck, lint, test, and static E2E scripts.
+- Mobile API client for text, URL, media upload, job polling, cancellation, and analysis retrieval.
+- Platform/media adapters:
+  - camera image
+  - gallery image
+  - microphone recording
+  - audio selection
+  - video recording
+  - video selection
+  - screenshot analysis
+  - Android share intent parsing
+  - iOS share extension parsing
+  - Android capture revocation handler
+  - iOS restricted-capture fallback
+  - deep-link parser
+  - mobile SDK capability detector
+- Mobile app shell listing required screens and local-first constraints.
+- Offline queue and background flush abstraction.
+- Secure settings store with token redaction on save.
+- Mobile auth token abstraction with expiry and remote logout.
+- Completion notification summary.
+- Result/evidence display summary.
+
+Changed files:
+
+- `.gitignore`
+- `pnpm-workspace.yaml`
+- `apps/mobile/package.json`
+- `apps/mobile/tsconfig.json`
+- `apps/mobile/scripts/build.mjs`
+- `apps/mobile/scripts/dev.mjs`
+- `apps/mobile/scripts/lint.mjs`
+- `apps/mobile/scripts/test.mjs`
+- `apps/mobile/scripts/typecheck.mjs`
+- `apps/mobile/src/App.tsx`
+- `apps/mobile/src/api/client.ts`
+- `apps/mobile/src/api/contracts.ts`
+- `apps/mobile/src/auth/mobile-auth.ts`
+- `apps/mobile/src/components/result-view.ts`
+- `apps/mobile/src/media/mobile-media.ts`
+- `apps/mobile/src/navigation/deep-links.ts`
+- `apps/mobile/src/notifications/completion.ts`
+- `apps/mobile/src/offline/offline-queue.ts`
+- `apps/mobile/src/platform/android.ts`
+- `apps/mobile/src/platform/ios.ts`
+- `apps/mobile/src/platform/permissions.ts`
+- `apps/mobile/src/platform/sdk.ts`
+- `apps/mobile/src/secure/secure-settings.ts`
+- `apps/mobile/tests/e2e/static-mobile-smoke.test.mjs`
+- `apps/mobile/tests/integration/mobile-flows.test.mjs`
+- `apps/mobile/tests/unit/api-client.test.mjs`
+- `apps/mobile/tests/unit/media-permissions.test.mjs`
+- `apps/mobile/tests/unit/offline-auth-settings.test.mjs`
+- `apps/mobile/tests/unit/platform-share.test.mjs`
+- `docs/implementation/AUTONOMOUS_EXECUTION_REPORT.md`
+
+Verification:
+
+- `git status --short`: clean before starting Slice 8.
+- `git branch --show-current`: `staging`.
+- `git log -5 --oneline`: Slice 7 commit present at `b4c7455`.
+- `python -m unittest discover -s tests`: 97 tests passed.
+- `python -m compileall predict.py apps packages tests`: passed.
+- `python -m ruff check apps packages tests predict.py`: passed.
+- `python -m black --check apps packages tests predict.py`: passed.
+- `python -m mypy apps packages tests predict.py`: passed, 84 source files checked.
+- `python -m apps.api.scripts.export_openapi --output packages/contracts/openapi/openapi.json`: passed.
+- Mobile direct checks:
+  - typecheck passed, 13 built JS files checked.
+  - lint passed, 20 files checked.
+  - unit/integration tests passed, 26 tests.
+  - static E2E smoke passed, 4 tests.
+- Web regression checks:
+  - typecheck passed, 11 built JS files checked.
+  - lint passed, 20 files checked.
+  - unit/integration tests passed, 23 tests.
+  - static E2E smoke passed, 6 tests.
+- Desktop regression checks:
+  - typecheck passed, 28 built JS files checked.
+  - lint passed, 41 files checked.
+  - unit/integration tests passed, 53 tests.
+  - static E2E smoke passed, 4 tests.
+- Extension regression checks:
+  - typecheck passed, 25 built JS files checked.
+  - lint passed, 38 files checked.
+  - unit/integration tests passed, 18 tests.
+  - static E2E smoke passed, 1 test.
+- `pnpm --filter mobile build/typecheck/lint/test/test:e2e`: passed.
+- `pnpm --filter web build/typecheck/lint/test/test:e2e`: passed.
+- `pnpm --filter desktop build/typecheck/lint/test/test:e2e`: passed.
+- `pnpm --filter extension build/typecheck/lint/test/test:e2e`: passed.
+
+Notes:
+
+- Android and iOS SDK availability is detected and reported by adapter code; no native SDK was required for normal tests.
+- pnpm printed the expected metadata update warning under restricted network; all package scripts exited successfully.
+- pnpm regenerated local `node_modules`, `.pnpm-store`, and `pnpm-lock.yaml`; those ignored artifacts were removed after path verification.
+
+Remaining risks:
+
+- No real React Native, Expo, Android, or Xcode build was run in this environment.
+- Native share extensions, foreground services, push notifications, and device capture are represented by adapters and deterministic tests, not installed native modules.
+- Auth remains an abstraction around secure settings and token expiry; production OIDC/RBAC belongs to Slice 9.
+- Offline factual verification is intentionally not promised; offline support is limited to draft/queue/resume abstractions.

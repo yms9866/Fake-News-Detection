@@ -13,3 +13,4 @@ pnpm-lock.yaml
 apps/extension/dist/
 apps/desktop/dist/
 apps/web/dist/
+apps/mobile/dist/

@@ -1,0 +1,20 @@
+{
+  "name": "mobile",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "description": "React Native-shaped mobile client adapters for fake-news analysis.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "node scripts/lint.mjs",
+    "test": "node scripts/build.mjs && node scripts/test.mjs tests/unit tests/integration",
+    "test:e2e": "node scripts/build.mjs && node scripts/test.mjs tests/e2e"
+  },
+  "optionalPeerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.74.0",
+    "expo": ">=51.0.0"
+  }
+}
