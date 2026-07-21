@@ -129,6 +129,66 @@ export class DesktopApiClient {
     return await response.text();
   }
 
+  async createLiveSession(payload) {
+    return await this.requestJson("/v1/live-sessions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  async getLiveSession(sessionId) {
+    return await this.getJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}`);
+  }
+
+  async submitLiveFrame(sessionId, payload) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/frames`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  async pauseLiveSession(sessionId) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/pause`, {
+      method: "POST"
+    });
+  }
+
+  async resumeLiveSession(sessionId) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/resume`, {
+      method: "POST"
+    });
+  }
+
+  async stopLiveSession(sessionId) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/stop`, {
+      method: "POST"
+    });
+  }
+
+  async cancelLiveSession(sessionId) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/cancel`, {
+      method: "POST"
+    });
+  }
+
+  async verifyLiveSession(sessionId, payload = {}) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/verify`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  async getLiveSessionEvents(sessionId, afterSequence = 0) {
+    const response = await this.request(
+      `/v1/live-sessions/${encodeURIComponent(sessionId)}/events?after_sequence=${Number(afterSequence) || 0}`,
+      { method: "GET" }
+    );
+    return await response.text();
+  }
+
   async getJson(path) {
     return await this.requestJson(path, { method: "GET" });
   }

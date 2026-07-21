@@ -14,6 +14,10 @@ from packages.backend.fnd.adapters.jobs.in_memory import (
     InMemoryJobRepository,
 )
 from packages.backend.fnd.adapters.jobs.in_process_queue import InProcessJobQueue
+from packages.backend.fnd.adapters.live.in_memory import (
+    InMemoryLiveSessionEventRepository,
+    InMemoryLiveSessionRepository,
+)
 from packages.backend.fnd.adapters.media.artifacts import TemporaryLocalArtifactStore
 from packages.backend.fnd.adapters.media.preprocessors import LocalMediaPreprocessor
 from packages.backend.fnd.adapters.media.probe import LocalMediaProbe
@@ -21,6 +25,7 @@ from packages.backend.fnd.application.services.media_jobs import (
     MediaAnalysisJobService,
     MediaAnalysisSubmissionService,
 )
+from packages.backend.fnd.application.services.live_ocr import LiveOcrSessionService
 from packages.backend.fnd.application.workflows.analyze_content import (
     AnalyzeContentWorkflow,
 )
@@ -170,6 +175,9 @@ class ApiContainer:
     job_service: MediaAnalysisJobService | None = None
     media_submission_service: MediaAnalysisSubmissionService | None = None
     job_queue: InProcessJobQueue | None = None
+    live_sessions: InMemoryLiveSessionRepository | None = None
+    live_events: InMemoryLiveSessionEventRepository | None = None
+    live_service: LiveOcrSessionService | None = None
 
     def __post_init__(self) -> None:
         self.jobs = self.jobs or InMemoryJobRepository()
@@ -202,9 +210,13 @@ class ApiContainer:
             handler=self.job_service.execute,
             concurrency=self.settings.media_worker_concurrency,
         )
+        self.live_sessions = self.live_sessions or InMemoryLiveSessionRepository()
+        self.live_events = self.live_events or InMemoryLiveSessionEventRepository()
         assert self.idempotency is not None
         assert self.media_probe is not None
         assert self.job_queue is not None
+        assert self.live_sessions is not None
+        assert self.live_events is not None
         self.media_submission_service = (
             self.media_submission_service
             or MediaAnalysisSubmissionService(
@@ -217,6 +229,11 @@ class ApiContainer:
                 queue=self.job_queue,
                 media_probe=self.media_probe,
             )
+        )
+        self.live_service = self.live_service or LiveOcrSessionService(
+            sessions=self.live_sessions,
+            events=self.live_events,
+            workflow=self.workflow,
         )
 
     def start(self) -> None:

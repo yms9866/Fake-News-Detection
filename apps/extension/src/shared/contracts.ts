@@ -4,6 +4,16 @@
 
 export type AnalysisInputType = "text" | "url" | "file" | "unknown";
 export type MediaType = "image" | "audio" | "video";
+export type LiveSourceType = "screen" | "window" | "region" | "browser_tab";
+export type LiveSessionStatus =
+  | "created"
+  | "awaiting_permission"
+  | "capturing"
+  | "paused"
+  | "finalizing"
+  | "completed"
+  | "cancelled"
+  | "failed";
 export type Quality = "HIGH" | "MEDIUM" | "LOW";
 export type StyleSignal = "LOW_STYLE_RISK" | "HIGH_STYLE_RISK" | "UNKNOWN" | "ERROR";
 export type ClientAnalysisState =
@@ -123,6 +133,41 @@ export interface JobResponse {
   trace_id: string;
 }
 
+export interface CreateLiveSessionRequest {
+  source_type: LiveSourceType;
+  source_id: string;
+  permission_granted: boolean;
+  source_url?: string | null;
+  settings?: Record<string, unknown>;
+}
+
+export interface SubmitLiveFrameRequest {
+  frame_id: string;
+  perceptual_hash: string;
+  ocr_text?: string;
+  dom_text?: string | null;
+  source_url?: string | null;
+}
+
+export interface LiveSessionResponse {
+  session_id: string;
+  status: LiveSessionStatus;
+  source_type: LiveSourceType;
+  source_id: string;
+  source_url: string | null;
+  stable_text: string;
+  frame_count: number;
+  skipped_frame_count: number;
+  changed_frame_count: number;
+  buffer_chars: number;
+  visible_indicator_required: boolean;
+  visible_indicator_active: boolean;
+  frame_bytes_retained: boolean;
+  verification_count: number;
+  request_id: string;
+  trace_id: string;
+}
+
 export interface AnalysisResultSummary {
   analysisId: string;
   jobId?: string;
@@ -139,4 +184,3 @@ export interface AnalysisResultSummary {
   requestId?: string;
   traceId?: string;
 }
-

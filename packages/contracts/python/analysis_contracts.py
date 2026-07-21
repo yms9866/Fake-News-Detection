@@ -12,6 +12,38 @@ Quality = Literal["HIGH", "MEDIUM", "LOW"]
 InputTypeCode = Literal["text", "url", "file", "unknown"]
 StyleSignal = Literal["LOW_STYLE_RISK", "HIGH_STYLE_RISK", "UNKNOWN", "ERROR"]
 MediaTypeCode = Literal["image", "audio", "video"]
+LiveSourceTypeCode = Literal["screen", "window", "region", "browser_tab"]
+LiveSessionStatusCode = Literal[
+    "created",
+    "awaiting_permission",
+    "capturing",
+    "paused",
+    "finalizing",
+    "completed",
+    "cancelled",
+    "failed",
+]
+LiveEventTypeCode = Literal[
+    "created",
+    "indicator",
+    "frame_accepted",
+    "frame_skipped",
+    "text_stabilized",
+    "paused",
+    "resumed",
+    "stopped",
+    "cancelled",
+    "verified",
+    "rate_limited",
+    "failed",
+]
+LiveVerificationTriggerCode = Literal[
+    "user",
+    "stable_article",
+    "idle",
+    "url_change",
+    "session_end",
+]
 JobStatusCode = Literal[
     "queued",
     "validating",
@@ -174,6 +206,128 @@ class PendingAnalysisResponse(BaseModel):
     completed_at: datetime | None = None
     request_id: str
     trace_id: str
+
+
+class LiveRegion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+
+
+class LiveSessionSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capture_interval_ms: int = Field(default=1000, ge=250, le=10_000)
+    perceptual_change_threshold: int = Field(default=4, ge=0, le=64)
+    stability_required_frames: int = Field(default=1, ge=1, le=10)
+    ocr_language: str = Field(default="eng", min_length=2, max_length=16)
+    max_buffer_chars: int = Field(default=20_000, ge=500, le=200_000)
+    max_events: int = Field(default=1000, ge=50, le=20_000)
+    ai_cleaning_cooldown_seconds: int = Field(default=30, ge=1, le=3600)
+    verification_cooldown_seconds: int = Field(default=60, ge=1, le=3600)
+    max_session_duration_seconds: int = Field(default=3600, ge=60, le=86_400)
+
+
+class CreateLiveSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_type: LiveSourceTypeCode
+    source_id: str = Field(min_length=1, max_length=512)
+    permission_granted: bool = False
+    region: LiveRegion | None = None
+    source_url: HttpUrl | None = None
+    settings: LiveSessionSettings = Field(default_factory=LiveSessionSettings)
+
+    @field_validator("source_id")
+    @classmethod
+    def source_id_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("source_id must not be blank")
+        return value
+
+
+class LiveOcrBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(default="", max_length=5000)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    bbox: LiveRegion | None = None
+
+
+class SubmitLiveFrameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    frame_id: str = Field(min_length=1, max_length=256)
+    perceptual_hash: str = Field(min_length=1, max_length=256)
+    ocr_text: str = Field(default="", max_length=100_000)
+    ocr_blocks: list[LiveOcrBlock] = Field(default_factory=list)
+    dom_text: str | None = Field(default=None, max_length=200_000)
+    source_url: HttpUrl | None = None
+
+
+class VerifyLiveSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trigger: LiveVerificationTriggerCode = "user"
+    deep_check: bool = False
+    max_length: int | None = Field(default=None, ge=128, le=8192)
+    force: bool = False
+
+
+class LiveVerificationSnapshotResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: str
+    trigger: LiveVerificationTriggerCode
+    final_verdict: str
+    confidence: Quality
+    reason: str
+    verified_at: datetime
+    rate_limited: bool = False
+
+
+class LiveSessionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    status: LiveSessionStatusCode
+    source_type: LiveSourceTypeCode
+    source_id: str
+    region: LiveRegion | None = None
+    source_url: str | None = None
+    stable_text: str
+    pending_text: str
+    frame_count: int
+    skipped_frame_count: int
+    changed_frame_count: int
+    buffer_chars: int
+    visible_indicator_required: bool
+    visible_indicator_active: bool
+    frame_bytes_retained: bool
+    ai_cleaning_call_count: int
+    verification_count: int
+    latest_verification: LiveVerificationSnapshotResponse | None = None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+    request_id: str
+    trace_id: str
+
+
+class LiveSessionEventResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str
+    session_id: str
+    sequence: int
+    event_type: LiveEventTypeCode
+    status: LiveSessionStatusCode
+    message: str
+    timestamp: datetime
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvidenceSummaryItem(BaseModel):

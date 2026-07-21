@@ -8,6 +8,35 @@ export type Quality = "HIGH" | "MEDIUM" | "LOW";
 export type InputTypeCode = "text" | "url" | "file" | "unknown";
 export type StyleSignal = "LOW_STYLE_RISK" | "HIGH_STYLE_RISK" | "UNKNOWN" | "ERROR";
 export type MediaTypeCode = "image" | "audio" | "video";
+export type LiveSourceTypeCode = "screen" | "window" | "region" | "browser_tab";
+export type LiveSessionStatusCode =
+  | "created"
+  | "awaiting_permission"
+  | "capturing"
+  | "paused"
+  | "finalizing"
+  | "completed"
+  | "cancelled"
+  | "failed";
+export type LiveEventTypeCode =
+  | "created"
+  | "indicator"
+  | "frame_accepted"
+  | "frame_skipped"
+  | "text_stabilized"
+  | "paused"
+  | "resumed"
+  | "stopped"
+  | "cancelled"
+  | "verified"
+  | "rate_limited"
+  | "failed";
+export type LiveVerificationTriggerCode =
+  | "user"
+  | "stable_article"
+  | "idle"
+  | "url_change"
+  | "session_end";
 export type JobStatusCode =
   | "queued"
   | "validating"
@@ -185,6 +214,103 @@ export interface PendingAnalysisResponse {
   completed_at: string | null;
   request_id: string;
   trace_id: string;
+}
+
+export interface LiveRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface LiveSessionSettings {
+  capture_interval_ms?: number;
+  perceptual_change_threshold?: number;
+  stability_required_frames?: number;
+  ocr_language?: string;
+  max_buffer_chars?: number;
+  max_events?: number;
+  ai_cleaning_cooldown_seconds?: number;
+  verification_cooldown_seconds?: number;
+  max_session_duration_seconds?: number;
+}
+
+export interface CreateLiveSessionRequest {
+  source_type: LiveSourceTypeCode;
+  source_id: string;
+  permission_granted: boolean;
+  region?: LiveRegion | null;
+  source_url?: string | null;
+  settings?: LiveSessionSettings;
+}
+
+export interface LiveOcrBlock {
+  text: string;
+  confidence?: number | null;
+  bbox?: LiveRegion | null;
+}
+
+export interface SubmitLiveFrameRequest {
+  frame_id: string;
+  perceptual_hash: string;
+  ocr_text?: string;
+  ocr_blocks?: LiveOcrBlock[];
+  dom_text?: string | null;
+  source_url?: string | null;
+}
+
+export interface VerifyLiveSessionRequest {
+  trigger?: LiveVerificationTriggerCode;
+  deep_check?: boolean;
+  max_length?: number | null;
+  force?: boolean;
+}
+
+export interface LiveVerificationSnapshotResponse {
+  analysis_id: string;
+  trigger: LiveVerificationTriggerCode;
+  final_verdict: string;
+  confidence: Quality;
+  reason: string;
+  verified_at: string;
+  rate_limited: boolean;
+}
+
+export interface LiveSessionResponse {
+  session_id: string;
+  status: LiveSessionStatusCode;
+  source_type: LiveSourceTypeCode;
+  source_id: string;
+  region: LiveRegion | null;
+  source_url: string | null;
+  stable_text: string;
+  pending_text: string;
+  frame_count: number;
+  skipped_frame_count: number;
+  changed_frame_count: number;
+  buffer_chars: number;
+  visible_indicator_required: boolean;
+  visible_indicator_active: boolean;
+  frame_bytes_retained: boolean;
+  ai_cleaning_call_count: number;
+  verification_count: number;
+  latest_verification: LiveVerificationSnapshotResponse | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  request_id: string;
+  trace_id: string;
+}
+
+export interface LiveSessionEventResponse {
+  event_id: string;
+  session_id: string;
+  sequence: number;
+  event_type: LiveEventTypeCode;
+  status: LiveSessionStatusCode;
+  message: string;
+  timestamp: string;
+  metadata: Record<string, unknown>;
 }
 
 export interface ApiErrorResponse {

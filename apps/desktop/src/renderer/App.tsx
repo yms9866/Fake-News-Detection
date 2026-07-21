@@ -6,6 +6,7 @@ import { renderCaptureSourceScreen } from "./screens/capture-source-screen.js";
 import { renderDiagnosticsScreen } from "./screens/diagnostics-screen.js";
 import { renderHistoryScreen } from "./screens/history-screen.js";
 import { renderHomeScreen } from "./screens/home-screen.js";
+import { renderLiveOcrScreen } from "./screens/live-ocr-screen.js";
 import { renderMediaUploadScreen } from "./screens/media-upload-screen.js";
 import { renderNewAnalysisScreen } from "./screens/new-analysis-screen.js";
 import { renderResultScreen } from "./screens/result-screen.js";
@@ -33,6 +34,7 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
     captureSources: [],
     selectedCaptureSource: null,
     activeJob: null,
+    liveSession: null,
     latestResult: null,
     error: null
   };
@@ -114,6 +116,54 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
         }
       });
     },
+    async startLiveOcr(payload) {
+      await run(async () => {
+        state.liveSession = await client.createLiveSession(payload);
+      });
+    },
+    async submitLiveFrame(payload) {
+      await run(async () => {
+        if (!state.liveSession) {
+          throw new Error("Start a live OCR session first.");
+        }
+        state.liveSession = await client.submitLiveFrame(state.liveSession.session_id, payload);
+      });
+    },
+    async pauseLiveOcr() {
+      await run(async () => {
+        if (state.liveSession) {
+          state.liveSession = await client.pauseLiveSession(state.liveSession.session_id);
+        }
+      });
+    },
+    async resumeLiveOcr() {
+      await run(async () => {
+        if (state.liveSession) {
+          state.liveSession = await client.resumeLiveSession(state.liveSession.session_id);
+        }
+      });
+    },
+    async stopLiveOcr() {
+      await run(async () => {
+        if (state.liveSession) {
+          state.liveSession = await client.stopLiveSession(state.liveSession.session_id);
+        }
+      });
+    },
+    async cancelLiveOcr() {
+      await run(async () => {
+        if (state.liveSession) {
+          state.liveSession = await client.cancelLiveSession(state.liveSession.session_id);
+        }
+      });
+    },
+    async verifyLiveOcr(payload) {
+      await run(async () => {
+        if (state.liveSession) {
+          state.liveSession = await client.verifyLiveSession(state.liveSession.session_id, payload);
+        }
+      });
+    },
     async saveSettings(settings) {
       await run(async () => {
         state.settings = { ...state.settings, ...(await settingsStore.save(settings)) };
@@ -131,6 +181,7 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
         state.settings = { ...DEFAULT_SETTINGS, ...(await settingsStore.clear()) };
         state.latestResult = null;
         state.activeJob = null;
+        state.liveSession = null;
       });
     }
   };
@@ -197,6 +248,7 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
       navButton("Text/URL", "text-url"),
       navButton("Media", "media"),
       navButton("Capture", "capture"),
+      navButton("Live OCR", "live-ocr"),
       navButton("Job", "active-job"),
       navButton("Result", "result"),
       navButton("History", "history"),
@@ -224,6 +276,8 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
         return renderMediaUploadScreen(state, actions);
       case "capture":
         return renderCaptureSourceScreen(state, actions);
+      case "live-ocr":
+        return renderLiveOcrScreen(state, actions);
       case "active-job":
         return renderActiveJobScreen(state, actions);
       case "result":

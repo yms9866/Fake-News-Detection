@@ -12,6 +12,11 @@ from packages.backend.fnd.domain.media import (
 )
 from packages.backend.fnd.domain.entities import AnalysisResult
 from packages.backend.fnd.domain.enums import StyleRiskSignal
+from packages.backend.fnd.domain.live import (
+    LiveRegion as DomainLiveRegion,
+    LiveSession as DomainLiveSession,
+    LiveSessionEvent as DomainLiveSessionEvent,
+)
 from packages.contracts.python.analysis_contracts import (
     AnalysisResponse,
     EvidenceSummaryItem,
@@ -19,6 +24,10 @@ from packages.contracts.python.analysis_contracts import (
     JobError,
     JobProgressEvent,
     JobResponse,
+    LiveRegion,
+    LiveSessionEventResponse,
+    LiveSessionResponse,
+    LiveVerificationSnapshotResponse,
     MediaAnalysisAccepted,
     VerificationResponse,
 )
@@ -186,6 +195,78 @@ def job_event_response_from_domain(
         sequence=event.sequence,
         status=cast(Any, event.status.value),
         progress=event.progress,
+        message=event.message,
+        timestamp=event.timestamp,
+        metadata=event.metadata,
+    )
+
+
+def _live_region(region: DomainLiveRegion | None) -> LiveRegion | None:
+    if region is None:
+        return None
+    return LiveRegion(
+        x=region.x,
+        y=region.y,
+        width=region.width,
+        height=region.height,
+    )
+
+
+def live_session_response_from_domain(
+    session: DomainLiveSession,
+    *,
+    request_id: str,
+    trace_id: str,
+) -> LiveSessionResponse:
+    latest = session.latest_verification
+    return LiveSessionResponse(
+        session_id=session.session_id,
+        status=cast(Any, session.status.value),
+        source_type=cast(Any, session.source_type.value),
+        source_id=session.source_id,
+        region=_live_region(session.region),
+        source_url=session.source_url,
+        stable_text=session.stable_text,
+        pending_text=session.pending_text,
+        frame_count=session.frame_count,
+        skipped_frame_count=session.skipped_frame_count,
+        changed_frame_count=session.changed_frame_count,
+        buffer_chars=len(session.stable_text),
+        visible_indicator_required=session.visible_indicator_required,
+        visible_indicator_active=session.visible_indicator_active,
+        frame_bytes_retained=session.frame_bytes_retained,
+        ai_cleaning_call_count=session.ai_cleaning_call_count,
+        verification_count=session.verification_count,
+        latest_verification=(
+            LiveVerificationSnapshotResponse(
+                analysis_id=latest.analysis_id,
+                trigger=cast(Any, latest.trigger.value),
+                final_verdict=latest.final_verdict,
+                confidence=cast(Any, latest.confidence),
+                reason=latest.reason,
+                verified_at=latest.verified_at,
+                rate_limited=latest.rate_limited,
+            )
+            if latest
+            else None
+        ),
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+        completed_at=session.completed_at,
+        request_id=request_id,
+        trace_id=trace_id,
+    )
+
+
+def live_event_response_from_domain(
+    event: DomainLiveSessionEvent,
+) -> LiveSessionEventResponse:
+    return LiveSessionEventResponse(
+        event_id=event.event_id,
+        session_id=event.session_id,
+        sequence=event.sequence,
+        event_type=cast(Any, event.event_type.value),
+        status=cast(Any, event.status.value),
         message=event.message,
         timestamp=event.timestamp,
         metadata=event.metadata,

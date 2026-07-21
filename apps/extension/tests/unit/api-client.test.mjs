@@ -101,3 +101,30 @@ test("backend error preserves stable code and request IDs", async () => {
   });
 });
 
+test("live browser-tab handoff uses live session endpoints", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return jsonResponse({ session_id: "live-tab", status: "capturing" });
+  };
+  const client = new ApiClient({ backendOrigin: "http://127.0.0.1:8000" });
+  await client.createLiveSession({
+    source_type: "browser_tab",
+    source_id: "tab-1",
+    permission_granted: true,
+    source_url: "https://example.test/article"
+  });
+  await client.submitLiveFrame("live-tab", {
+    frame_id: "dom-1",
+    perceptual_hash: "dom-hash",
+    dom_text: "Article text from DOM",
+    source_url: "https://example.test/article"
+  });
+  await client.verifyLiveSession("live-tab", { trigger: "user", force: true });
+
+  assert.deepEqual(calls.map((call) => new URL(call.url).pathname), [
+    "/v1/live-sessions",
+    "/v1/live-sessions/live-tab/frames",
+    "/v1/live-sessions/live-tab/verify"
+  ]);
+});

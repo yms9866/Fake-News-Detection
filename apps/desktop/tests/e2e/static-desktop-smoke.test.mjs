@@ -28,7 +28,7 @@ test("static smoke captures one fixture frame without retaining bytes", async ()
 
 test("static smoke includes all required desktop screens", async () => {
   const app = await readFile(new URL("../../src/renderer/App.tsx", import.meta.url), "utf8");
-  for (const route of ["home", "new-analysis", "text-url", "media", "capture", "active-job", "result", "history", "settings", "diagnostics"]) {
+  for (const route of ["home", "new-analysis", "text-url", "media", "capture", "live-ocr", "active-job", "result", "history", "settings", "diagnostics"]) {
     assert.equal(app.includes(route), true);
   }
 });

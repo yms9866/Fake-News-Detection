@@ -115,3 +115,29 @@ test("provider failures do not expose stack traces through client errors", async
     );
   });
 });
+
+test("live OCR session methods use versioned live endpoints", async () => {
+  const calls = [];
+  await withFetch(async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method || "GET" });
+    return response({ session_id: "live-1", status: "capturing" });
+  }, async () => {
+    const client = new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" });
+    await client.createLiveSession({ source_type: "screen", source_id: "s1", permission_granted: true });
+    await client.submitLiveFrame("live-1", { frame_id: "f1", perceptual_hash: "aaaa", ocr_text: "claim" });
+    await client.pauseLiveSession("live-1");
+    await client.resumeLiveSession("live-1");
+    await client.verifyLiveSession("live-1", { trigger: "user" });
+    await client.stopLiveSession("live-1");
+    await client.cancelLiveSession("live-1");
+  });
+  assert.deepEqual(calls.map((call) => new URL(call.url).pathname), [
+    "/v1/live-sessions",
+    "/v1/live-sessions/live-1/frames",
+    "/v1/live-sessions/live-1/pause",
+    "/v1/live-sessions/live-1/resume",
+    "/v1/live-sessions/live-1/verify",
+    "/v1/live-sessions/live-1/stop",
+    "/v1/live-sessions/live-1/cancel"
+  ]);
+});

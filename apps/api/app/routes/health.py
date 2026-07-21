@@ -63,6 +63,11 @@ def ready(
             status=external_ai_status,
             detail=provider.__class__.__name__,
         ),
+        ComponentStatus(
+            name="live_ocr_sessions",
+            status="ready" if container.live_service is not None else "missing",
+            detail="SSE live OCR sessions with explicit source selection.",
+        ),
     ]
     media_capabilities: dict[str, object] = {}
     if container.media_probe is not None:

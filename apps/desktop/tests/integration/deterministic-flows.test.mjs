@@ -33,6 +33,20 @@ function fakeApiFetch() {
     if (path === "/v1/analyses/image-analysis") {
       return json(result("image-analysis"));
     }
+    if (path === "/v1/live-sessions") {
+      return json({ session_id: "live-1", status: "capturing", stable_text: "" });
+    }
+    if (path === "/v1/live-sessions/live-1/frames") {
+      return json({ session_id: "live-1", status: "capturing", stable_text: "live claim", frame_count: 1 });
+    }
+    if (path === "/v1/live-sessions/live-1/verify") {
+      return json({
+        session_id: "live-1",
+        status: "capturing",
+        stable_text: "live claim",
+        latest_verification: { final_verdict: "UNVERIFIED" }
+      });
+    }
     return json({ error_code: "NOT_FOUND", message: "not found" }, 404);
   };
   return { fetchImpl, calls };
@@ -147,4 +161,16 @@ test("deterministic flow uses no desktop verdict decision", async () => {
     await new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" }).analyzeText({ text: "claim" });
   });
   assert.equal(calls.some((call) => call.path === "/v1/analyses/text"), true);
+});
+
+test("live OCR deterministic flow creates frame and verifies explicitly", async () => {
+  const { fetchImpl } = fakeApiFetch();
+  await withFetch(fetchImpl, async () => {
+    const client = new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" });
+    const live = await client.createLiveSession({ source_type: "screen", source_id: "screen-1", permission_granted: true });
+    const frame = await client.submitLiveFrame(live.session_id, { frame_id: "f1", perceptual_hash: "aaaa", ocr_text: "claim" });
+    const verified = await client.verifyLiveSession(live.session_id, { trigger: "user", force: true });
+    assert.equal(frame.frame_count, 1);
+    assert.equal(verified.latest_verification.final_verdict, "UNVERIFIED");
+  });
 });

@@ -15,6 +15,10 @@ from packages.backend.fnd.adapters.jobs.in_memory import (
     InMemoryJobEventRepository,
     InMemoryJobRepository,
 )
+from packages.backend.fnd.adapters.live.in_memory import (
+    InMemoryLiveSessionEventRepository,
+)
+from packages.backend.fnd.application.services.live_ocr import LiveOcrSessionService
 
 from .state import ApiContainer, InMemoryAnalysisRepository, ModelRegistry
 
@@ -55,5 +59,17 @@ def get_job_repository(request: Request) -> InMemoryJobRepository:
 
 def get_job_event_repository(request: Request) -> InMemoryJobEventRepository:
     repository = get_container(request).job_events
+    assert repository is not None
+    return repository
+
+
+def get_live_service(request: Request) -> LiveOcrSessionService:
+    service = get_container(request).live_service
+    assert service is not None
+    return service
+
+
+def get_live_event_repository(request: Request) -> InMemoryLiveSessionEventRepository:
+    repository = get_container(request).live_events
     assert repository is not None
     return repository

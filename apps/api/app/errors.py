@@ -64,6 +64,10 @@ def register_error_handlers(app: FastAPI) -> None:
             status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
         elif exc.code == "MEDIA_TOO_LARGE":
             status_code = status.HTTP_413_CONTENT_TOO_LARGE
+        elif exc.code in {"JOB_NOT_FOUND", "LIVE_SESSION_NOT_FOUND"}:
+            status_code = status.HTTP_404_NOT_FOUND
+        elif exc.code == "LIVE_PERMISSION_DENIED":
+            status_code = status.HTTP_403_FORBIDDEN
         payload = error_payload(
             request=request,
             error_code=exc.code,

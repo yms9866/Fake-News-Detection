@@ -133,3 +133,141 @@ Remaining risks:
 - Real OS screen/window capture is covered by an adapter boundary and deterministic fixtures, not by a live device smoke test.
 - No signed installer or packaged desktop distribution was produced; Slice 5 does not require one.
 - Continuous live OCR, pause/resume live sessions, and frame-diffing are intentionally deferred to Slice 6.
+
+## Slice 6 - Live OCR
+
+Date: 2026-07-22
+
+Baseline:
+
+- Branch: `staging`
+- Starting commit: `dad2093 feat: implement slice 5 Electron desktop application`
+- Starting tag: `slice-5-complete`
+
+Plan:
+
+1. Preserve Slice 1-5 behavior and add live OCR as an additive session API.
+2. Keep final analysis and verdict decisions in the backend workflow and deterministic policy.
+3. Add a live-session state machine with explicit source selection, permission, visible indicator, pause/resume/stop/cancel, and SSE events.
+4. Process live frame text/blocks with perceptual hashing, stabilization, scroll merge, subtitle dedupe, deterministic rule cleaning, cooldowns, and capped buffers.
+5. Integrate browser-tab DOM text and URL handoff without inventing URLs from screenshots.
+6. Update Python/TypeScript contracts, desktop client controls, and extension API client compatibility.
+7. Add deterministic tests and rerun all Slice 1-6 gates.
+
+Implemented:
+
+- Live OCR domain entities:
+  - source types
+  - session statuses
+  - event types
+  - verification triggers
+  - regions
+  - OCR blocks
+  - session config
+  - frame metadata
+  - verification snapshots
+- Live OCR application service:
+  - explicit source and permission validation
+  - visible capture indicator state
+  - pause, resume, stop, and cancel
+  - perceptual-hash static frame skipping
+  - OCR stabilization
+  - scrolling text merge
+  - repeated subtitle removal
+  - rule-based cleanup
+  - AI-cleaning cooldown boundary
+  - verification cooldown boundary
+  - no frame-byte retention
+  - capped stable text buffer
+  - shared workflow verification on explicit triggers
+- API endpoints:
+  - `POST /v1/live-sessions`
+  - `GET /v1/live-sessions/{session_id}`
+  - `POST /v1/live-sessions/{session_id}/frames`
+  - `POST /v1/live-sessions/{session_id}/pause`
+  - `POST /v1/live-sessions/{session_id}/resume`
+  - `POST /v1/live-sessions/{session_id}/verify`
+  - `POST /v1/live-sessions/{session_id}/stop`
+  - `POST /v1/live-sessions/{session_id}/cancel`
+  - `GET /v1/live-sessions/{session_id}/events`
+- Shared contracts:
+  - Python Pydantic live-session requests/responses
+  - generated-compatible TypeScript live-session contracts
+  - OpenAPI schema update
+- Clients:
+  - desktop live-session API methods
+  - desktop Live OCR screen with explicit start, frame submit, pause, resume, verify, stop, and cancel controls
+  - extension API client methods for browser-tab DOM handoff
+- Tests:
+  - 22 backend live OCR tests
+  - desktop live OCR API and deterministic flow tests
+  - extension browser-tab handoff test
+
+Changed files:
+
+- `apps/api/app/dependencies.py`
+- `apps/api/app/errors.py`
+- `apps/api/app/factory.py`
+- `apps/api/app/routes/health.py`
+- `apps/api/app/routes/live.py`
+- `apps/api/app/serializers.py`
+- `apps/api/app/state.py`
+- `apps/desktop/src/renderer/App.tsx`
+- `apps/desktop/src/renderer/api/client.ts`
+- `apps/desktop/src/renderer/api/contracts.ts`
+- `apps/desktop/src/renderer/screens/live-ocr-screen.ts`
+- `apps/desktop/tests/e2e/static-desktop-smoke.test.mjs`
+- `apps/desktop/tests/integration/deterministic-flows.test.mjs`
+- `apps/desktop/tests/unit/api-client.test.mjs`
+- `apps/extension/src/shared/api-client.ts`
+- `apps/extension/src/shared/contracts.ts`
+- `apps/extension/tests/unit/api-client.test.mjs`
+- `packages/backend/fnd/adapters/live/__init__.py`
+- `packages/backend/fnd/adapters/live/in_memory.py`
+- `packages/backend/fnd/application/services/live_ocr.py`
+- `packages/backend/fnd/domain/live.py`
+- `packages/backend/fnd/ports/live.py`
+- `packages/contracts/openapi/openapi.json`
+- `packages/contracts/python/analysis_contracts.py`
+- `packages/contracts/typescript/api.ts`
+- `tests/test_live_ocr_slice6.py`
+- `docs/implementation/AUTONOMOUS_EXECUTION_REPORT.md`
+
+Verification:
+
+- `git status --short`: clean before starting Slice 6.
+- `git branch --show-current`: `staging`.
+- `git log -5 --oneline`: Slice 5 commit present at `dad2093`.
+- `python -m unittest tests.test_live_ocr_slice6`: 22 tests passed.
+- `python -m unittest discover -s tests`: 97 tests passed.
+- `python -m compileall predict.py apps packages tests`: passed.
+- `python -m ruff check apps packages tests predict.py`: passed.
+- `python -m black --check apps packages tests predict.py`: passed after formatting the three new Python files.
+- `python -m mypy apps packages tests predict.py`: passed, 84 source files checked.
+- `python -m apps.api.scripts.export_openapi --output packages/contracts/openapi/openapi.json`: passed.
+- Desktop direct checks:
+  - typecheck passed, 28 built JS files checked.
+  - lint passed, 41 files checked.
+  - unit/integration tests passed, 53 tests.
+  - static E2E smoke passed, 4 tests.
+- Extension direct checks:
+  - typecheck passed, 25 built JS files checked.
+  - lint passed, 38 files checked.
+  - unit/integration tests passed, 18 tests.
+  - static E2E smoke passed, 1 test.
+- `pnpm --filter desktop build/typecheck/lint/test/test:e2e`: passed.
+- `pnpm --filter extension build/typecheck/lint/test/test:e2e`: passed.
+
+Notes:
+
+- SSE was used for live-session events to match the existing job progress event style.
+- pnpm again printed a metadata update warning because network is restricted; all package scripts exited successfully.
+- pnpm regenerated local `node_modules`, `.pnpm-store`, and `pnpm-lock.yaml`; those ignored artifacts were removed after path verification.
+- Provider-secret-name scans include existing backend configuration and lint guard strings, but no client bundle secrets or secret values were added.
+
+Remaining risks:
+
+- Real continuous OS capture and OCR provider execution are represented through live-session frame/text contracts and deterministic adapters; no real device smoke was run.
+- The AI coherence cleaner is a deterministic/rate-limited boundary in this slice, not an external AI cleaner.
+- Live verification uses explicit API triggers and cooldowns; automatic stable-article detection is represented by trigger contracts and service behavior but not a full classifier.
+- Extension integration is additive API support for browser-tab DOM handoff; no extension UI redesign was done.

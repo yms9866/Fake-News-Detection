@@ -105,6 +105,30 @@ export class ApiClient {
     return await response.text();
   }
 
+  async createLiveSession(payload) {
+    return await this.requestJson("/v1/live-sessions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  async submitLiveFrame(sessionId, payload) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/frames`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  async verifyLiveSession(sessionId, payload = {}) {
+    return await this.requestJson(`/v1/live-sessions/${encodeURIComponent(sessionId)}/verify`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
   async getJson(path, options = {}) {
     return await this.requestJson(path, { method: "GET", retry: Boolean(options.retry) });
   }
@@ -160,4 +184,3 @@ export class ApiClient {
 export function createApiClient(settings) {
   return new ApiClient(settings);
 }
-
