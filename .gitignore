@@ -1,9 +1,9 @@
 __pycache__/
 *.py[cod]
-datasets/
-.venv/
-venv/
+/datasets/
+/.venv/
+/venv/
 .env
-models/
+/models/
 *.joblib
 .cache/
