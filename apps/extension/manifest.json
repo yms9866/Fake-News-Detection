@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Fake News Analysis Companion",
+  "description": "Analyze selected text, pages, articles, and one-time visible-tab screenshots with the local FastAPI backend.",
+  "version": "0.4.0",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "Analyze page",
+    "default_popup": "popup/popup.html"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "options_page": "options/options.html",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}
+

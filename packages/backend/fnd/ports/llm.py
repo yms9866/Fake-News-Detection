@@ -8,5 +8,6 @@ from packages.backend.fnd.domain.entities import EvidenceAnalysis, SearchContext
 
 
 class LanguageModelEvidenceProvider(Protocol):
-    def verify(self, claim_text: str, search_context: SearchContext) -> EvidenceAnalysis:
-        ...
+    def verify(
+        self, claim_text: str, search_context: SearchContext
+    ) -> EvidenceAnalysis: ...

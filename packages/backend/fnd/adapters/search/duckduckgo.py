@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import date
+import importlib
 import re
+from typing import Any
 
 from packages.backend.fnd.domain.entities import (
     SearchContext,
@@ -24,7 +26,9 @@ def make_search_query(text: str, max_words: int = 32) -> str:
     return f"{base_query} fact check official source {date.today().isoformat()}"
 
 
-def format_web_context(results: tuple[SearchResult, ...], error: str | None = None) -> str:
+def format_web_context(
+    results: tuple[SearchResult, ...], error: str | None = None
+) -> str:
     if error:
         return f"WEB_SEARCH_ERROR: {error}"
 
@@ -49,12 +53,13 @@ class DuckDuckGoSearchProvider:
 
         try:
             try:
-                from ddgs import DDGS
+                ddgs_module = importlib.import_module("ddgs")
             except ImportError:
-                from duckduckgo_search import DDGS
+                ddgs_module = importlib.import_module("duckduckgo_search")
+            ddgs_class: Any = getattr(ddgs_module, "DDGS")
 
             collected: list[SearchResult] = []
-            with DDGS() as ddgs:
+            with ddgs_class() as ddgs:
                 results = ddgs.text(query, max_results=max_results)
                 for result in results:
                     collected.append(

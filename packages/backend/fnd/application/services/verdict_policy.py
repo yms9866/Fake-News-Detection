@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from packages.backend.fnd.domain.entities import (
     EvidenceAnalysis,
     EvidenceItem,
+    HIGH_STYLE_RISK_THRESHOLD,
     StyleAnalysis,
     VerdictDecision,
 )
@@ -24,7 +25,6 @@ from packages.backend.fnd.domain.enums import (
     StyleRiskSignal,
 )
 
-
 POLICY_VERSION = "verdict-policy-v1"
 
 
@@ -32,14 +32,6 @@ def _style_signal_text(style: StyleAnalysis | None) -> str:
     if style is None:
         return StyleRiskSignal.UNKNOWN.value
     return style.signal.value
-
-
-def _is_strong_high_style_risk(style: StyleAnalysis | None) -> bool:
-    return (
-        style is not None
-        and style.signal == StyleRiskSignal.HIGH
-        and (style.confidence or 0.0) >= 0.80
-    )
 
 
 def _is_eligible_evidence(item: EvidenceItem) -> bool:
@@ -78,6 +70,7 @@ def _best_quality(items: list[EvidenceItem]) -> EvidenceQuality:
 @dataclass(frozen=True)
 class VerdictPolicy:
     version: str = POLICY_VERSION
+    high_style_risk_threshold: float = HIGH_STYLE_RISK_THRESHOLD
 
     def decide(
         self,
@@ -87,38 +80,13 @@ class VerdictPolicy:
         style_signal = _style_signal_text(style)
 
         if evidence is None:
-            return self._no_evidence_decision(style, style_signal)
+            return self._verification_not_performed_decision(style, style_signal)
 
-        if evidence.error:
+        if evidence.error or evidence.verdict == FinalVerdict.ERROR:
             return VerdictDecision(
                 verdict=FinalVerdict.UNVERIFIED,
                 confidence=EvidenceQuality.LOW,
-                reason=(
-                    f"Evidence verification failed. The local model gave a {style_signal} "
-                    "signal, but this is not enough to verify factual truth."
-                ),
-                policy_version=self.version,
-            )
-
-        if evidence.evidence_quality == EvidenceQuality.LOW:
-            if _is_strong_high_style_risk(style):
-                return VerdictDecision(
-                    verdict=FinalVerdict.SUSPICIOUS_UNVERIFIED,
-                    confidence=EvidenceQuality.MEDIUM,
-                    reason=(
-                        "Evidence quality is low, and the local model found strong high-risk "
-                        "writing patterns. Manual review is recommended."
-                    ),
-                    policy_version=self.version,
-                )
-
-            return VerdictDecision(
-                verdict=FinalVerdict.UNVERIFIED,
-                confidence=EvidenceQuality.LOW,
-                reason=(
-                    f"Evidence quality is low. The local model gave a {style_signal} "
-                    "signal, but style is not proof of truth."
-                ),
+                reason=self._verification_failed_reason(style),
                 policy_version=self.version,
             )
 
@@ -186,31 +154,68 @@ class VerdictPolicy:
                 policy_version=self.version,
             )
 
-        if eligible:
-            return VerdictDecision(
-                verdict=FinalVerdict.UNVERIFIED,
-                confidence=EvidenceQuality.LOW,
-                reason=(
-                    "Some relevant evidence was found, but it is not strong or independent "
-                    "enough for a definitive verdict."
-                ),
-                policy_version=self.version,
-            )
+        return self._insufficient_evidence_decision(style, style_signal)
 
-        return self._no_evidence_decision(style, style_signal)
+    def _is_reliable_high_style_risk(self, style: StyleAnalysis | None) -> bool:
+        return (
+            style is not None
+            and style.signal == StyleRiskSignal.HIGH
+            and style.scope_reliable
+            and (style.confidence or 0.0) >= self.high_style_risk_threshold
+        )
 
-    def _no_evidence_decision(
+    def _verification_not_performed_decision(
         self,
         style: StyleAnalysis | None,
         style_signal: str,
     ) -> VerdictDecision:
-        if _is_strong_high_style_risk(style):
+        if style is not None and not style.scope_reliable:
+            reason = (
+                "The input is too short for reliable article-style analysis, and factual "
+                "verification was not performed."
+            )
+        elif self._is_reliable_high_style_risk(style):
+            reason = (
+                "Factual verification was not performed. The local style model found a "
+                "reliable high-risk writing signal, but style alone cannot establish "
+                "whether the claim is false."
+            )
+        else:
+            reason = (
+                f"Factual verification was not performed. The local model gave a "
+                f"{style_signal} signal, but style is not proof of truth."
+            )
+
+        return VerdictDecision(
+            verdict=FinalVerdict.UNVERIFIED,
+            confidence=EvidenceQuality.LOW,
+            reason=reason,
+            policy_version=self.version,
+        )
+
+    def _insufficient_evidence_decision(
+        self,
+        style: StyleAnalysis | None,
+        style_signal: str,
+    ) -> VerdictDecision:
+        if style is not None and not style.scope_reliable:
+            return VerdictDecision(
+                verdict=FinalVerdict.UNVERIFIED,
+                confidence=EvidenceQuality.LOW,
+                reason=(
+                    "The retrieved evidence was insufficient to verify or contradict the "
+                    "claim, and the short-input style result is unreliable."
+                ),
+                policy_version=self.version,
+            )
+
+        if self._is_reliable_high_style_risk(style):
             return VerdictDecision(
                 verdict=FinalVerdict.SUSPICIOUS_UNVERIFIED,
                 confidence=EvidenceQuality.MEDIUM,
                 reason=(
-                    "No qualifying fetched evidence verified the claim, and the local model "
-                    "found strong high-risk writing patterns. Manual review is recommended."
+                    "The retrieved evidence was insufficient to verify or contradict the "
+                    "claim, and the reliable local style signal was high risk."
                 ),
                 policy_version=self.version,
             )
@@ -219,8 +224,21 @@ class VerdictPolicy:
             verdict=FinalVerdict.UNVERIFIED,
             confidence=EvidenceQuality.LOW,
             reason=(
-                f"No qualifying fetched evidence verified the claim. The local model gave "
-                f"a {style_signal} signal, but style is not proof of truth."
+                "The retrieved evidence was insufficient to verify or contradict the claim. "
+                f"The local model gave a {style_signal} signal, but style is not proof "
+                "of truth."
             ),
             policy_version=self.version,
+        )
+
+    def _verification_failed_reason(self, style: StyleAnalysis | None) -> str:
+        if style is not None and not style.scope_reliable:
+            return (
+                "Factual verification could not be completed, and the short-input style "
+                "result is unreliable."
+            )
+
+        return (
+            "Factual verification could not be completed. The local style signal is not "
+            "enough to verify factual truth."
         )

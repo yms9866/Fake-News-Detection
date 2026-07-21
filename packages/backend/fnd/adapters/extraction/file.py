@@ -57,7 +57,9 @@ class LocalFileExtractor:
         text = normalize_text(pytesseract.image_to_string(image))
 
         if not text:
-            raise ExtractionError("OCR finished but found no readable text in the image.")
+            raise ExtractionError(
+                "OCR finished but found no readable text in the image."
+            )
 
         return text
 
@@ -109,6 +111,8 @@ class LocalFileExtractor:
 
         extracted_text = normalize_text(" ".join(text_samples))
         if not extracted_text:
-            raise ExtractionError("Video analysis found no usable audio or readable frame text.")
+            raise ExtractionError(
+                "Video analysis found no usable audio or readable frame text."
+            )
 
         return extracted_text

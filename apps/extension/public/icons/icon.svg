@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Fake News Analysis Companion">
+  <rect width="128" height="128" rx="24" fill="#16324f"/>
+  <path d="M30 30h68v12H30zM30 54h68v10H30zM30 76h42v10H30z" fill="#f6f8fb"/>
+  <circle cx="91" cy="84" r="17" fill="#f6c85f"/>
+  <path d="M84 84l5 5 10-12" fill="none" stroke="#16324f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+

@@ -5,7 +5,10 @@ from __future__ import annotations
 from packages.backend.fnd.adapters.extraction.file import LocalFileExtractor
 from packages.backend.fnd.adapters.extraction.text import DirectTextExtractor
 from packages.backend.fnd.adapters.extraction.url import UrlArticleExtractor
-from packages.backend.fnd.adapters.extraction.url_safety import SafePageFetcher, UrlSafetyPolicy
+from packages.backend.fnd.adapters.extraction.url_safety import (
+    SafePageFetcher,
+    UrlSafetyPolicy,
+)
 from packages.backend.fnd.adapters.llm.gemini import GeminiEvidenceProvider
 from packages.backend.fnd.adapters.models.modernbert import ModernBertStyleModel
 from packages.backend.fnd.adapters.search.duckduckgo import DuckDuckGoSearchProvider
@@ -41,5 +44,7 @@ def build_analyze_content_workflow(settings: Settings) -> AnalyzeContentWorkflow
         style_model=ModernBertStyleModel(model_path=settings.modernbert_model_path),
         search_provider=DuckDuckGoSearchProvider(),
         evidence_provider=evidence_provider,
-        verdict_policy=VerdictPolicy(),
+        verdict_policy=VerdictPolicy(
+            high_style_risk_threshold=settings.high_style_risk_threshold
+        ),
     )

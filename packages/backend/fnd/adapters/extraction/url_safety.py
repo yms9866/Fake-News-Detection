@@ -9,7 +9,6 @@ from urllib.parse import urljoin, urlparse
 
 from packages.backend.fnd.domain.errors import UnsafeUrlError
 
-
 BLOCKED_HOSTS = {"localhost", "localhost.localdomain"}
 ALLOWED_SCHEMES = {"http", "https"}
 
@@ -47,13 +46,15 @@ class UrlSafetyPolicy:
 
         try:
             if _is_blocked_ip(normalized_host):
-                raise UnsafeUrlError("Private, local, metadata, and reserved IPs are not allowed.")
+                raise UnsafeUrlError(
+                    "Private, local, metadata, and reserved IPs are not allowed."
+                )
             return
         except ValueError:
             pass
 
         addresses = {
-            result[4][0]
+            str(result[4][0])
             for result in socket.getaddrinfo(
                 normalized_host,
                 parsed.port or (443 if parsed.scheme.lower() == "https" else 80),
@@ -66,7 +67,9 @@ class UrlSafetyPolicy:
 
         for address in addresses:
             if _is_blocked_ip(address):
-                raise UnsafeUrlError("URL resolves to a private, local, or reserved IP address.")
+                raise UnsafeUrlError(
+                    "URL resolves to a private, local, or reserved IP address."
+                )
 
 
 @dataclass
@@ -117,7 +120,9 @@ class SafePageFetcher:
             if 300 <= response.status_code < 400:
                 location = response.headers.get("Location")
                 if not location:
-                    raise UnsafeUrlError("Redirect response did not include a Location header.")
+                    raise UnsafeUrlError(
+                        "Redirect response did not include a Location header."
+                    )
 
                 current_url = urljoin(current_url, location)
                 continue
@@ -131,7 +136,9 @@ class SafePageFetcher:
 
         content_type = response.headers.get("Content-Type", "")
         if "text/html" not in content_type and "text/plain" not in content_type:
-            raise UnsafeUrlError(f"Unsupported URL content type: {content_type or 'unknown'}")
+            raise UnsafeUrlError(
+                f"Unsupported URL content type: {content_type or 'unknown'}"
+            )
 
         chunks: list[bytes] = []
         total = 0

@@ -1,0 +1,1 @@
+"""Development job adapters."""

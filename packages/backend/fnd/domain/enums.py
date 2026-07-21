@@ -6,15 +6,45 @@ from enum import Enum
 
 
 class InputType(str, Enum):
-    DIRECT_TEXT = "Direct Text"
-    URL = "URL"
-    FILE = "File"
-    UNKNOWN = "Unknown"
+    DIRECT_TEXT = "text"
+    URL = "url"
+    FILE = "file"
+    UNKNOWN = "unknown"
+
+
+class MediaType(str, Enum):
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
+
+
+class JobStatus(str, Enum):
+    QUEUED = "queued"
+    VALIDATING = "validating"
+    PREPROCESSING = "preprocessing"
+    EXTRACTING = "extracting"
+    CLEANING = "cleaning"
+    STYLE_ANALYSIS = "style_analysis"
+    SEARCHING = "searching"
+    FETCHING_EVIDENCE = "fetching_evidence"
+    VERIFYING = "verifying"
+    DECIDING = "deciding"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self in {
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        }
 
 
 class StyleRiskSignal(str, Enum):
-    LOW = "LOW STYLE RISK"
-    HIGH = "HIGH STYLE RISK"
+    LOW = "LOW_STYLE_RISK"
+    HIGH = "HIGH_STYLE_RISK"
     UNKNOWN = "UNKNOWN"
     ERROR = "ERROR"
 

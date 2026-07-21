@@ -5,4 +5,8 @@ export type {
   AnalysisResponse,
   AnalyzeTextRequest,
   AnalyzeUrlRequest,
+  JobResponse,
+  JobStatus,
+  MediaAnalysisAccepted,
+  MediaType,
 } from "../../../../extension/src/shared/contracts";

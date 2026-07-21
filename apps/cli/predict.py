@@ -11,7 +11,6 @@ from packages.backend.fnd.config.settings import Settings
 from packages.backend.fnd.domain.entities import AnalyzeContentCommand
 from packages.backend.fnd.domain.errors import FndError
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -33,7 +32,9 @@ def parse_args(settings: Settings) -> argparse.Namespace:
     parser.add_argument("--file", type=Path, default=None)
     parser.add_argument("--deep-check", action="store_true")
     parser.add_argument("--gemini-model", type=str, default=settings.gemini_model)
-    parser.add_argument("--max-search-results", type=int, default=settings.max_search_results)
+    parser.add_argument(
+        "--max-search-results", type=int, default=settings.max_search_results
+    )
     parser.add_argument("--max-length", type=int, default=settings.max_length)
 
     return parser.parse_args()
@@ -68,6 +69,7 @@ def main() -> None:
         gemini_api_key=settings.gemini_api_key,
         max_search_results=args.max_search_results,
         max_length=args.max_length,
+        high_style_risk_threshold=settings.high_style_risk_threshold,
         enable_external_ai=settings.enable_external_ai,
         max_url_bytes=settings.max_url_bytes,
         request_timeout_seconds=settings.request_timeout_seconds,

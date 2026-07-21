@@ -1,0 +1,245 @@
+"""API composition state and in-memory Slice 2 repositories."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from threading import Lock
+from typing import Any, cast
+
+from packages.backend.fnd.adapters.jobs.in_memory import (
+    InMemoryIdempotencyRepository,
+    InMemoryJobEventRepository,
+    InMemoryJobRepository,
+)
+from packages.backend.fnd.adapters.jobs.in_process_queue import InProcessJobQueue
+from packages.backend.fnd.adapters.media.artifacts import TemporaryLocalArtifactStore
+from packages.backend.fnd.adapters.media.preprocessors import LocalMediaPreprocessor
+from packages.backend.fnd.adapters.media.probe import LocalMediaProbe
+from packages.backend.fnd.application.services.media_jobs import (
+    MediaAnalysisJobService,
+    MediaAnalysisSubmissionService,
+)
+from packages.backend.fnd.application.workflows.analyze_content import (
+    AnalyzeContentWorkflow,
+)
+from packages.backend.fnd.config.settings import Settings
+from packages.backend.fnd.domain.entities import AnalysisResult, utc_now
+from packages.backend.fnd.domain.enums import MediaType
+from packages.contracts.python.analysis_contracts import (
+    AnalysisResponse,
+    JobError,
+    PendingAnalysisResponse,
+)
+
+from .serializers import analysis_response_from_result
+
+AnalysisLookup = AnalysisResponse | PendingAnalysisResponse
+
+
+@dataclass
+class InMemoryAnalysisRepository:
+    """Synchronous in-memory repository for completed and pending analyses."""
+
+    _items: dict[str, AnalysisLookup] = field(default_factory=dict)
+    _lock: Lock = field(default_factory=Lock)
+
+    def save(self, response: AnalysisResponse) -> None:
+        with self._lock:
+            self._items[response.analysis_id] = response
+
+    def get(self, analysis_id: str) -> AnalysisLookup | None:
+        with self._lock:
+            return self._items.get(analysis_id)
+
+    def mark_queued(
+        self,
+        *,
+        analysis_id: str,
+        job_id: str,
+        media_type: MediaType,
+        request_id: str,
+        trace_id: str,
+    ) -> None:
+        with self._lock:
+            self._items[analysis_id] = PendingAnalysisResponse(
+                analysis_id=analysis_id,
+                status="queued",
+                input_type="file",
+                media_type=media_type.value,
+                job_id=job_id,
+                created_at=utc_now(),
+                completed_at=None,
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+
+    def save_result(
+        self,
+        *,
+        analysis_id: str,
+        result: AnalysisResult,
+        request_id: str,
+        trace_id: str,
+    ) -> None:
+        now = utc_now()
+        with self._lock:
+            existing = self._items.get(analysis_id)
+            created_at: datetime = (
+                existing.created_at
+                if isinstance(existing, PendingAnalysisResponse)
+                else now
+            )
+            self._items[analysis_id] = analysis_response_from_result(
+                result,
+                analysis_id=analysis_id,
+                request_id=request_id,
+                trace_id=trace_id,
+                created_at=created_at,
+                completed_at=now,
+            )
+
+    def mark_failed(
+        self,
+        *,
+        analysis_id: str,
+        error_code: str,
+        message: str,
+        request_id: str,
+        trace_id: str,
+    ) -> None:
+        now = utc_now()
+        with self._lock:
+            existing = self._items.get(analysis_id)
+            created_at: datetime = (
+                existing.created_at
+                if isinstance(existing, PendingAnalysisResponse)
+                else now
+            )
+            job_id = (
+                existing.job_id if isinstance(existing, PendingAnalysisResponse) else ""
+            )
+            media_type = (
+                existing.media_type
+                if isinstance(existing, PendingAnalysisResponse)
+                else "image"
+            )
+            status = "cancelled" if error_code == "JOB_CANCELLED" else "failed"
+            self._items[analysis_id] = PendingAnalysisResponse(
+                analysis_id=analysis_id,
+                status=cast(Any, status),
+                input_type="file",
+                media_type=cast(Any, media_type),
+                job_id=job_id,
+                error=JobError(code=error_code, message=message, retryable=False),
+                created_at=created_at,
+                completed_at=now,
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+
+
+@dataclass(frozen=True)
+class ModelRegistry:
+    """Expose model configuration and load status without forcing a load."""
+
+    model_path: Path
+    max_length: int
+    style_model: object
+
+    def model_exists(self) -> bool:
+        return self.model_path.exists()
+
+    def is_loaded(self) -> bool:
+        return bool(getattr(self.style_model, "_loaded", False))
+
+
+@dataclass
+class ApiContainer:
+    settings: Settings
+    workflow: AnalyzeContentWorkflow
+    analyses: InMemoryAnalysisRepository
+    model_registry: ModelRegistry
+    jobs: InMemoryJobRepository | None = None
+    job_events: InMemoryJobEventRepository | None = None
+    idempotency: InMemoryIdempotencyRepository | None = None
+    artifacts: TemporaryLocalArtifactStore | None = None
+    media_probe: LocalMediaProbe | None = None
+    media_preprocessor: LocalMediaPreprocessor | None = None
+    job_service: MediaAnalysisJobService | None = None
+    media_submission_service: MediaAnalysisSubmissionService | None = None
+    job_queue: InProcessJobQueue | None = None
+
+    def __post_init__(self) -> None:
+        self.jobs = self.jobs or InMemoryJobRepository()
+        self.job_events = self.job_events or InMemoryJobEventRepository(
+            retention_limit=self.settings.job_event_retention_limit
+        )
+        self.idempotency = self.idempotency or InMemoryIdempotencyRepository()
+        self.artifacts = self.artifacts or TemporaryLocalArtifactStore(
+            self.settings.media_upload_directory
+        )
+        self.media_probe = self.media_probe or LocalMediaProbe(self.settings)
+        self.media_preprocessor = self.media_preprocessor or LocalMediaPreprocessor(
+            settings=self.settings
+        )
+        assert self.artifacts is not None
+        assert self.jobs is not None
+        assert self.job_events is not None
+        assert self.media_preprocessor is not None
+        self.job_service = self.job_service or MediaAnalysisJobService(
+            settings=self.settings,
+            workflow=self.workflow,
+            artifacts=self.artifacts,
+            jobs=self.jobs,
+            events=self.job_events,
+            analyses=self.analyses,
+            media_preprocessor=self.media_preprocessor,
+        )
+        assert self.job_service is not None
+        self.job_queue = self.job_queue or InProcessJobQueue(
+            handler=self.job_service.execute,
+            concurrency=self.settings.media_worker_concurrency,
+        )
+        assert self.idempotency is not None
+        assert self.media_probe is not None
+        assert self.job_queue is not None
+        self.media_submission_service = (
+            self.media_submission_service
+            or MediaAnalysisSubmissionService(
+                settings=self.settings,
+                artifacts=self.artifacts,
+                jobs=self.jobs,
+                events=self.job_events,
+                idempotency=self.idempotency,
+                analyses=self.analyses,
+                queue=self.job_queue,
+                media_probe=self.media_probe,
+            )
+        )
+
+    def start(self) -> None:
+        if self.job_queue is not None:
+            self.job_queue.start()
+
+    def stop(self) -> None:
+        if self.job_queue is not None:
+            self.job_queue.stop()
+
+    @classmethod
+    def from_workflow(
+        cls,
+        settings: Settings,
+        workflow: AnalyzeContentWorkflow,
+    ) -> "ApiContainer":
+        return cls(
+            settings=settings,
+            workflow=workflow,
+            analyses=InMemoryAnalysisRepository(),
+            model_registry=ModelRegistry(
+                model_path=settings.modernbert_model_path,
+                max_length=settings.max_length,
+                style_model=workflow.style_model,
+            ),
+        )

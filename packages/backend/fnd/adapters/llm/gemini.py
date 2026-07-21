@@ -18,7 +18,6 @@ from packages.backend.fnd.domain.enums import (
     SourceType,
 )
 
-
 GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
@@ -70,7 +69,9 @@ def normalize_quality(value: Any) -> EvidenceQuality:
     return EvidenceQuality.LOW
 
 
-def snippet_leads_to_evidence_items(search_context: SearchContext) -> tuple[EvidenceItem, ...]:
+def snippet_leads_to_evidence_items(
+    search_context: SearchContext,
+) -> tuple[EvidenceItem, ...]:
     """Represent search snippets as leads so policy cannot treat them as proof."""
 
     return tuple(
@@ -99,7 +100,9 @@ class GeminiEvidenceProvider:
         self.api_key = api_key
         self.model_name = model_name
 
-    def verify(self, claim_text: str, search_context: SearchContext) -> EvidenceAnalysis:
+    def verify(
+        self, claim_text: str, search_context: SearchContext
+    ) -> EvidenceAnalysis:
         if not self.api_key:
             return EvidenceAnalysis(
                 provider_name="gemini",
@@ -170,7 +173,9 @@ Web search context:
             parsed = parse_ai_json(output)
 
             verdict = normalize_verdict(parsed.get("verdict"))
-            quality = normalize_quality(parsed.get("evidence_quality", parsed.get("confidence")))
+            quality = normalize_quality(
+                parsed.get("evidence_quality", parsed.get("confidence"))
+            )
 
             evidence_summary = parsed.get("evidence_summary", [])
             if not isinstance(evidence_summary, list):

@@ -16,8 +16,8 @@ from .enums import (
     StyleRiskSignal,
 )
 
-
 MIN_LOCAL_STYLE_WORDS = 20
+HIGH_STYLE_RISK_THRESHOLD = 0.80
 
 
 def utc_now() -> datetime:
@@ -53,8 +53,18 @@ def local_style_scope_warning(text: str) -> str | None:
     word_label = "word" if word_count == 1 else "words"
     return (
         f"Short input ({word_count} {word_label}). The local model is an article-style "
-        "classifier, so this score is unreliable for factual verification. Use --deep-check."
+        "classifier, so this score is unreliable for factual verification."
     )
+
+
+def input_type_label(input_type: InputType) -> str:
+    labels = {
+        InputType.DIRECT_TEXT: "Direct Text",
+        InputType.URL: "URL",
+        InputType.FILE: "File",
+        InputType.UNKNOWN: "Unknown",
+    }
+    return labels.get(input_type, "Unknown")
 
 
 @dataclass(frozen=True)
@@ -84,7 +94,41 @@ class StyleAnalysis:
     model_name: str | None = None
     model_version: str | None = None
     max_length: int | None = None
+    scope_reliable: bool = True
+    word_count: int = 0
+    minimum_word_count: int = MIN_LOCAL_STYLE_WORDS
+    warning: str | None = None
+    inference_duration_ms: float | None = None
     error: str | None = None
+
+    @classmethod
+    def from_prediction(
+        cls,
+        *,
+        signal: StyleRiskSignal,
+        confidence: float | None,
+        text: str,
+        model_name: str | None = None,
+        model_version: str | None = None,
+        max_length: int | None = None,
+        inference_duration_ms: float | None = None,
+        error: str | None = None,
+    ) -> "StyleAnalysis":
+        words = count_words(text)
+        scope_reliable = words >= MIN_LOCAL_STYLE_WORDS
+        return cls(
+            signal=signal,
+            confidence=confidence,
+            model_name=model_name,
+            model_version=model_version,
+            max_length=max_length,
+            scope_reliable=scope_reliable,
+            word_count=words,
+            minimum_word_count=MIN_LOCAL_STYLE_WORDS,
+            warning=local_style_scope_warning(text) if not scope_reliable else None,
+            inference_duration_ms=inference_duration_ms,
+            error=error,
+        )
 
 
 @dataclass(frozen=True)
@@ -162,3 +206,4 @@ class AnalysisResult:
     evidence: EvidenceAnalysis | None
     search_context: SearchContext | None
     final: VerdictDecision
+    timings_ms: dict[str, float] = field(default_factory=dict)

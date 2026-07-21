@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from packages.backend.fnd.domain.entities import (
     AnalysisResult,
-    local_style_scope_warning,
+    input_type_label,
     truncate_for_display,
 )
 from packages.backend.fnd.domain.enums import StyleRiskSignal
@@ -17,11 +17,15 @@ def _format_confidence(confidence: float | None) -> str:
 
 
 def _input_type_label(result: AnalysisResult) -> str:
-    label = result.document.input_type.value
+    label = input_type_label(result.document.input_type)
     suffix = result.document.metadata.get("suffix")
     if suffix:
         return f"{label} ({suffix})"
     return label
+
+
+def _style_signal_label(result: AnalysisResult) -> str:
+    return result.style.signal.value.replace("_", " ")
 
 
 def print_analysis_report(result: AnalysisResult, deep_check: bool) -> None:
@@ -36,18 +40,19 @@ def print_analysis_report(result: AnalysisResult, deep_check: bool) -> None:
         if result.style.error:
             print(f"Error:            {result.style.error}")
     else:
-        print(f"ML Signal:        {result.style.signal.value}")
+        print(f"ML Signal:        {_style_signal_label(result)}")
         print(f"Style Confidence: {_format_confidence(result.style.confidence)}")
         print("Note: This is not factual verification.")
-        warning = local_style_scope_warning(text)
-        if warning:
-            print(f"Scope Warning: {warning}")
+        if result.style.warning:
+            print(f"Scope Warning: {result.style.warning}")
     print()
 
     if deep_check:
         print("--- LAYER 2: Live Web Search & Gemini Verification ---")
         if result.search_context is None:
-            print("[Gemini] API key is missing; skipping live web search and Gemini verification.")
+            print(
+                "[Gemini] API key is missing; skipping live web search and Gemini verification."
+            )
 
         evidence = result.evidence
         if evidence is None:
@@ -72,21 +77,22 @@ def print_analysis_report(result: AnalysisResult, deep_check: bool) -> None:
         print("ML Signal: ERROR")
         print("Style Confidence: N/A")
     else:
-        print(f"ML Signal: {result.style.signal.value}")
+        print(f"ML Signal: {_style_signal_label(result)}")
         print(f"Style Confidence: {_format_confidence(result.style.confidence)}")
         print(
             "Interpretation: This layer checks writing/style patterns only. "
             "It does not prove whether the claim is factually true."
         )
-        warning = local_style_scope_warning(text)
-        if warning:
-            print(f"Scope Warning: {warning}")
+        if result.style.warning:
+            print(f"Scope Warning: {result.style.warning}")
 
     if result.evidence is not None:
         evidence = result.evidence
         print("\nLayer 2: Evidence-Based Verification")
         print("Method: Live web search + Gemini")
-        print(f"Verification Verdict: {evidence.verdict.value if evidence.verdict else 'UNKNOWN'}")
+        print(
+            f"Verification Verdict: {evidence.verdict.value if evidence.verdict else 'UNKNOWN'}"
+        )
         print(f"Evidence Quality: {evidence.evidence_quality.value}")
 
         if evidence.evidence_summary:

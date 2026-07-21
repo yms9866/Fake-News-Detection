@@ -31,7 +31,9 @@ class UrlArticleExtractor:
             extracted_text = normalize_text(body_text)
 
         if not extracted_text:
-            raise ExtractionError("Failed to extract readable text from the provided URL.")
+            raise ExtractionError(
+                "Failed to extract readable text from the provided URL."
+            )
 
         return ExtractedDocument(
             input_type=InputType.URL,
