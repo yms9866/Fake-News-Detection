@@ -1,3 +1,4 @@
 packages:
   - "apps/extension"
   - "apps/desktop"
+  - "apps/web"

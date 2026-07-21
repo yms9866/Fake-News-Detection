@@ -271,3 +271,148 @@ Remaining risks:
 - The AI coherence cleaner is a deterministic/rate-limited boundary in this slice, not an external AI cleaner.
 - Live verification uses explicit API triggers and cooldowns; automatic stable-article detection is represented by trigger contracts and service behavior but not a full classifier.
 - Extension integration is additive API support for browser-tab DOM handoff; no extension UI redesign was done.
+
+## Slice 7 - Web Application
+
+Date: 2026-07-22
+
+Baseline:
+
+- Branch: `staging`
+- Starting commit: `7d342cd feat: implement slice 6 live OCR`
+- Starting tag: `slice-6-complete`
+
+Plan:
+
+1. Preserve all backend, extension, desktop, and live OCR behavior.
+2. Add a web client package under `apps/web` using the existing pnpm workspace.
+3. Use shared/generated contracts and backend API endpoints; do not duplicate extraction, model, evidence, OCR, or verdict logic.
+4. Add text, URL, media, display/camera/microphone capture, live OCR, result/evidence, history, report, review, admin, auth, and diagnostics screens.
+5. Add development auth and security shells for PKCE, route guards, CSP, and CSRF.
+6. Add deterministic unit, integration, and static E2E tests.
+7. Run all Slice 1-7 gates.
+
+Implemented:
+
+- `apps/web` package with build, typecheck, lint, test, and static E2E scripts.
+- Static responsive web app shell with:
+  - analysis screen
+  - media upload screen
+  - browser capture controls
+  - live OCR controls
+  - result/evidence view
+  - history shell
+  - report shell
+  - review shell
+  - admin shell
+  - auth shell
+  - diagnostics shell
+- Web API client for:
+  - health
+  - readiness
+  - models
+  - text analysis
+  - URL analysis
+  - image/audio/video upload
+  - job polling
+  - cancellation
+  - live OCR sessions
+- Browser capture adapters:
+  - display capture
+  - camera capture
+  - microphone capture
+  - permission-denial mapping
+  - immediate stream stop helper
+- Security/auth:
+  - CSP constant and static HTML CSP
+  - CSRF token helper
+  - development PKCE-shaped auth adapter
+  - session expiry and role guard abstraction
+  - safe external evidence link descriptors
+  - compact local history references
+- Tests:
+  - web API flow tests
+  - media upload and async job tests
+  - live OCR web flow tests
+  - display/camera/microphone denial tests
+  - auth/session/role tests
+  - CSP/CSRF tests
+  - safe rendering and history tests
+  - responsive/static smoke tests
+  - no web verdict-policy test
+
+Changed files:
+
+- `.gitignore`
+- `pnpm-workspace.yaml`
+- `apps/web/package.json`
+- `apps/web/tsconfig.json`
+- `apps/web/scripts/build.mjs`
+- `apps/web/scripts/dev.mjs`
+- `apps/web/scripts/lint.mjs`
+- `apps/web/scripts/test.mjs`
+- `apps/web/scripts/typecheck.mjs`
+- `apps/web/src/App.tsx`
+- `apps/web/src/index.html`
+- `apps/web/src/main.ts`
+- `apps/web/src/styles.css`
+- `apps/web/src/api/client.ts`
+- `apps/web/src/api/contracts.ts`
+- `apps/web/src/api/validation.ts`
+- `apps/web/src/auth/dev-auth.ts`
+- `apps/web/src/capture/browser-capture.ts`
+- `apps/web/src/components/dom.ts`
+- `apps/web/src/components/safe-rendering.ts`
+- `apps/web/src/security/csp.ts`
+- `apps/web/src/security/csrf.ts`
+- `apps/web/src/stores/history-store.ts`
+- `apps/web/tests/e2e/static-web-smoke.test.mjs`
+- `apps/web/tests/integration/web-flows.test.mjs`
+- `apps/web/tests/unit/api-client.test.mjs`
+- `apps/web/tests/unit/auth-security.test.mjs`
+- `apps/web/tests/unit/capture-permissions.test.mjs`
+- `apps/web/tests/unit/rendering-history.test.mjs`
+- `docs/implementation/AUTONOMOUS_EXECUTION_REPORT.md`
+
+Verification:
+
+- `git status --short`: clean before starting Slice 7.
+- `git branch --show-current`: `staging`.
+- `git log -5 --oneline`: Slice 6 commit present at `7d342cd`.
+- `python -m unittest discover -s tests`: 97 tests passed.
+- `python -m compileall predict.py apps packages tests`: passed.
+- `python -m ruff check apps packages tests predict.py`: passed.
+- `python -m black --check apps packages tests predict.py`: passed.
+- `python -m mypy apps packages tests predict.py`: passed, 84 source files checked.
+- `python -m apps.api.scripts.export_openapi --output packages/contracts/openapi/openapi.json`: passed.
+- Web direct checks:
+  - typecheck passed, 11 built JS files checked.
+  - lint passed, 20 files checked.
+  - unit/integration tests passed, 23 tests.
+  - static E2E smoke passed, 6 tests.
+- Desktop regression checks:
+  - typecheck passed, 28 built JS files checked.
+  - lint passed, 41 files checked.
+  - unit/integration tests passed, 53 tests.
+  - static E2E smoke passed, 4 tests.
+- Extension regression checks:
+  - typecheck passed, 25 built JS files checked.
+  - lint passed, 38 files checked.
+  - unit/integration tests passed, 18 tests.
+  - static E2E smoke passed, 1 test.
+- `pnpm --filter web build/typecheck/lint/test/test:e2e`: passed.
+- `pnpm --filter desktop build/typecheck/lint/test/test:e2e`: passed.
+- `pnpm --filter extension build/typecheck/lint/test/test:e2e`: passed.
+
+Notes:
+
+- The web app is dependency-light and static for this slice so normal verification does not require downloading a framework or browser binaries.
+- pnpm printed the expected metadata update warning under restricted network; all package scripts exited successfully.
+- pnpm regenerated local `node_modules`, `.pnpm-store`, and `pnpm-lock.yaml`; those ignored artifacts were removed after path verification.
+
+Remaining risks:
+
+- No production framework runtime, server-side rendering, real OAuth provider, or browser Playwright run was introduced in this slice.
+- Camera/microphone/display capture are adapter-tested with permission-denial doubles rather than real browser devices.
+- Auth is a development shell with PKCE-shaped primitives, not production OIDC.
+- Review and administration are shells for later RBAC/tenant work in Slice 9.
