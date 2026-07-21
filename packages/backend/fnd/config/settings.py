@@ -68,6 +68,14 @@ class Settings:
     retain_uploaded_artifacts: bool = False
     retain_failed_artifacts: bool = False
     job_event_retention_limit: int = 500
+    database_url: str | None = None
+    redis_url: str | None = None
+    s3_bucket: str | None = None
+    s3_kms_key_id: str | None = None
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    otel_endpoint: str | None = None
+    enterprise_mode: bool = False
 
     @classmethod
     def from_environment(cls, project_root: Path | None = None) -> "Settings":
@@ -141,4 +149,13 @@ class Settings:
             job_event_retention_limit=int(
                 os.environ.get("JOB_EVENT_RETENTION_LIMIT", "500")
             ),
+            database_url=os.environ.get("DATABASE_URL") or None,
+            redis_url=os.environ.get("REDIS_URL") or None,
+            s3_bucket=os.environ.get("S3_BUCKET") or None,
+            s3_kms_key_id=os.environ.get("S3_KMS_KEY_ID") or None,
+            oidc_issuer=os.environ.get("OIDC_ISSUER") or None,
+            oidc_client_id=os.environ.get("OIDC_CLIENT_ID") or None,
+            otel_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or None,
+            enterprise_mode=os.environ.get("ENTERPRISE_MODE", "false").lower()
+            in {"1", "true", "yes"},
         )

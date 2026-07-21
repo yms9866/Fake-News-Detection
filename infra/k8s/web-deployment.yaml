@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fnd-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fnd-web
+  template:
+    metadata:
+      labels:
+        app: fnd-web
+    spec:
+      containers:
+        - name: web
+          image: fnd-web:local
+          ports:
+            - containerPort: 8080

@@ -90,6 +90,26 @@ def ready(
             )
         )
 
+    enterprise_components = {
+        "postgresql": container.settings.database_url,
+        "redis_queue": container.settings.redis_url,
+        "s3_object_storage": container.settings.s3_bucket,
+        "oidc": container.settings.oidc_issuer and container.settings.oidc_client_id,
+        "opentelemetry": container.settings.otel_endpoint,
+    }
+    for name, configured in enterprise_components.items():
+        components.append(
+            ComponentStatus(
+                name=name,
+                status="configured" if configured else "disabled",
+                detail=(
+                    "Configured for enterprise mode."
+                    if configured
+                    else "Disabled in local mode."
+                ),
+            )
+        )
+
     return ReadinessResponse(
         status="ready" if model_exists else "unready",
         request_id=get_request_id(request),

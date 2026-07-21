@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fnd-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fnd-worker
+  template:
+    metadata:
+      labels:
+        app: fnd-worker
+    spec:
+      containers:
+        - name: worker
+          image: fnd-api:local
+          command: ["python", "-m", "apps.api.worker"]
+          envFrom:
+            - secretRef:
+                name: fnd-secrets

@@ -1,0 +1,1 @@
+"""Enterprise object storage adapters."""

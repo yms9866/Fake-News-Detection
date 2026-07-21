@@ -1,0 +1,7 @@
+{
+  "name": "com.fake_news_detector.local_agent",
+  "description": "Fake News Detector local agent bridge",
+  "path": "/opt/fnd/native-host",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://REPLACE_WITH_EXTENSION_ID/"]
+}

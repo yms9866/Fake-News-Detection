@@ -1,0 +1,12 @@
+{
+  "title": "Fake News Detector Enterprise",
+  "panels": [
+    { "title": "Queue depth", "metric": "fnd.queue.depth" },
+    { "title": "Provider latency", "metric": "fnd.provider.latency_ms" },
+    { "title": "Model latency", "metric": "fnd.model.latency_ms" },
+    { "title": "Provider cost", "metric": "fnd.provider.cost" },
+    { "title": "Error rate", "metric": "fnd.errors.count" },
+    { "title": "UNKNOWN verdict rate", "metric": "fnd.verdict.unknown.count" },
+    { "title": "Worker health", "metric": "fnd.worker.health" }
+  ]
+}

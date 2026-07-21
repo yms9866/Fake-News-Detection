@@ -1,0 +1,10 @@
+{
+  "windows": {
+    "certificate_subject": "REPLACE_WITH_CODE_SIGNING_CERT_SUBJECT",
+    "timestamp_url": "https://timestamp.example.com"
+  },
+  "macos": {
+    "developer_id": "REPLACE_WITH_DEVELOPER_ID",
+    "notarization_profile": "REPLACE_WITH_NOTARY_PROFILE"
+  }
+}

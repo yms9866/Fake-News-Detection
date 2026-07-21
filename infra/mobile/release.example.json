@@ -1,0 +1,10 @@
+{
+  "android": {
+    "application_id": "com.example.fnd",
+    "keystore_alias": "REPLACE_WITH_ALIAS"
+  },
+  "ios": {
+    "bundle_identifier": "com.example.fnd",
+    "provisioning_profile": "REPLACE_WITH_PROFILE_NAME"
+  }
+}

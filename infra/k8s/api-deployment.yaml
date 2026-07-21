@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fnd-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fnd-api
+  template:
+    metadata:
+      labels:
+        app: fnd-api
+    spec:
+      containers:
+        - name: api
+          image: fnd-api:local
+          ports:
+            - containerPort: 8000
+          env:
+            - name: FND_ENVIRONMENT
+              value: production

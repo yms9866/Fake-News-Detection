@@ -543,3 +543,175 @@ Remaining risks:
 - Native share extensions, foreground services, push notifications, and device capture are represented by adapters and deterministic tests, not installed native modules.
 - Auth remains an abstraction around secure settings and token expiry; production OIDC/RBAC belongs to Slice 9.
 - Offline factual verification is intentionally not promised; offline support is limited to draft/queue/resume abstractions.
+
+## Slice 9 - Enterprise Hardening
+
+Date: 2026-07-22
+
+Baseline:
+
+- Branch: `staging`
+- Starting commit: `03258d3 feat: implement slice 8 mobile application`
+- Starting tag: `slice-8-complete`
+
+Plan:
+
+1. Preserve all Slice 1-8 local workflow, API, media, live OCR, and client behavior.
+2. Add enterprise persistence, queue, storage, auth, audit, telemetry, and deployment boundaries as replaceable adapters.
+3. Keep local mode in-memory and dependency-light; do not require PostgreSQL, Redis, S3, OIDC, or OpenTelemetry SDKs for normal tests.
+4. Add deterministic security and infrastructure tests for tenant isolation, RBAC, token replay, migrations, deployment manifests, and secret hygiene.
+5. Run the complete backend and client verification matrix before committing.
+
+Implemented:
+
+- Enterprise domain and ports:
+  - tenant context and tenant isolation checks
+  - roles for user, reviewer, team admin, organization admin, and system admin
+  - audit actions for login/logout/device/analysis/report/deletion/retention/admin/export/security failures
+  - device registration, user sessions, retention policy, audit events, and rate-limit decision entities
+- PostgreSQL-shaped adapters:
+  - tenant-aware JSON repositories for analyses/jobs
+  - event stream repository
+  - idempotency repository
+  - audit repository
+  - device repository
+  - session repository
+  - retention policy repository
+  - defensive table-name validation for generated SQL
+- Development enterprise adapters:
+  - in-memory tenant JSON repository
+  - in-memory audit, device, session, and retention repositories
+- Redis-shaped queue adapter:
+  - enqueue with tenant metadata
+  - retry policy metadata
+  - retry-or-dead-letter behavior
+  - cancellation set
+  - progress hash
+  - queue depth reporting
+- S3-compatible object storage adapter:
+  - tenant-scoped object keys
+  - path traversal normalization
+  - pre-signed PUT URLs
+  - deletion
+  - KMS encryption configuration
+  - retention metadata and optional legal hold
+- OIDC/OAuth PKCE auth service:
+  - authorization-code request builder
+  - PKCE challenge generation
+  - user sessions
+  - device registration
+  - session revocation
+  - RBAC checks
+  - token replay detection
+  - audit logging for login/logout/device registration
+- Observability:
+  - OpenTelemetry-compatible trace recorder boundary
+  - sensitive attribute redaction
+  - span timing helper
+  - in-memory metrics recorder for counters, gauges, and histograms
+  - dashboard config for queue depth, provider latency, model latency, cost, error rate, UNKNOWN rate, and worker health
+- Deployment:
+  - API Dockerfile and Compose stack with PostgreSQL and Redis
+  - Kubernetes API deployment
+  - Kubernetes worker deployment
+  - Kubernetes web deployment
+  - Kubernetes migration job
+  - Kubernetes secret template
+  - native messaging host manifest example
+  - desktop signing abstraction
+  - mobile release abstraction
+  - importable migration and worker entrypoints
+- API readiness:
+  - reports PostgreSQL, Redis queue, S3 object storage, OIDC, and OpenTelemetry as configured or disabled
+  - local mode remains ready without external enterprise providers
+
+Changed files:
+
+- `apps/api/app/routes/health.py`
+- `apps/api/worker.py`
+- `infra/__init__.py`
+- `infra/alembic/__init__.py`
+- `infra/alembic/run_migrations.py`
+- `infra/alembic/versions/0001_enterprise_schema.py`
+- `infra/alembic/versions/__init__.py`
+- `infra/desktop/signing.example.json`
+- `infra/docker/Dockerfile.api`
+- `infra/docker/compose.yaml`
+- `infra/k8s/api-deployment.yaml`
+- `infra/k8s/migration-job.yaml`
+- `infra/k8s/secret-template.yaml`
+- `infra/k8s/web-deployment.yaml`
+- `infra/k8s/worker-deployment.yaml`
+- `infra/mobile/release.example.json`
+- `infra/native-messaging/fnd-host-manifest.example.json`
+- `infra/otel/collector.yaml`
+- `infra/otel/dashboard.fnd.json`
+- `packages/backend/fnd/adapters/persistence/__init__.py`
+- `packages/backend/fnd/adapters/persistence/in_memory_enterprise.py`
+- `packages/backend/fnd/adapters/persistence/postgres.py`
+- `packages/backend/fnd/adapters/queue/__init__.py`
+- `packages/backend/fnd/adapters/queue/redis_queue.py`
+- `packages/backend/fnd/adapters/storage/__init__.py`
+- `packages/backend/fnd/adapters/storage/s3.py`
+- `packages/backend/fnd/adapters/telemetry/otel.py`
+- `packages/backend/fnd/application/services/auth.py`
+- `packages/backend/fnd/config/settings.py`
+- `packages/backend/fnd/domain/enterprise.py`
+- `packages/backend/fnd/ports/enterprise.py`
+- `tests/test_enterprise_slice9.py`
+- `docs/implementation/AUTONOMOUS_EXECUTION_REPORT.md`
+
+Verification:
+
+- `git status --short`: clean before starting Slice 9.
+- `git branch --show-current`: `staging`.
+- `git log -5 --oneline`: Slice 8 commit present at `03258d3`.
+- `python -m unittest tests.test_enterprise_slice9`: 13 tests passed.
+- `python -m unittest discover -s tests`: 110 tests passed.
+- `python -m compileall predict.py apps packages tests infra`: passed.
+- `python -m ruff check apps packages tests predict.py infra`: passed.
+- `python -m black --check apps packages tests predict.py infra`: passed.
+- `python -m mypy apps packages tests predict.py infra`: passed, 102 source files checked.
+- `python -m apps.api.scripts.export_openapi --output packages/contracts/openapi/openapi.json`: passed.
+- Mobile checks:
+  - `pnpm --filter mobile build`: passed.
+  - `pnpm --filter mobile typecheck`: passed, 13 built JS files checked.
+  - `pnpm --filter mobile lint`: passed, 20 files checked.
+  - `pnpm --filter mobile test`: 26 tests passed.
+  - `pnpm --filter mobile test:e2e`: 4 tests passed.
+- Web checks:
+  - `pnpm --filter web build`: passed.
+  - `pnpm --filter web typecheck`: passed, 11 built JS files checked.
+  - `pnpm --filter web lint`: passed, 20 files checked.
+  - `pnpm --filter web test`: 23 tests passed.
+  - `pnpm --filter web test:e2e`: 6 tests passed.
+- Desktop checks:
+  - `pnpm --filter desktop build`: passed.
+  - `pnpm --filter desktop typecheck`: passed, 28 built JS files checked.
+  - `pnpm --filter desktop lint`: passed, 41 files checked.
+  - `pnpm --filter desktop test`: 53 tests passed.
+  - `pnpm --filter desktop test:e2e`: 4 tests passed.
+- Extension checks:
+  - `pnpm --filter extension build`: passed.
+  - `pnpm --filter extension typecheck`: passed, 25 built JS files checked.
+  - `pnpm --filter extension lint`: passed, 38 files checked.
+  - `pnpm --filter extension test`: 18 tests passed.
+  - `pnpm --filter extension test:e2e`: 1 test passed.
+- Domain/application FastAPI scan: no matches.
+- Secret scan: no real provider secrets found; matches were existing provider key-name guards or tests.
+- pnpm regenerated local `node_modules`, `.pnpm-store`, and `pnpm-lock.yaml`; those ignored artifacts were removed after path verification.
+
+Notes:
+
+- PostgreSQL, Redis, S3, OIDC, and OpenTelemetry remain adapter boundaries. Normal tests do not need network, cloud credentials, containers, or provider secrets.
+- The worker entrypoint intentionally refuses to start until a production Redis consumer is explicitly wired.
+- Compose binds the API to `127.0.0.1` for local safety.
+- pnpm printed the expected metadata update warning under restricted network during the first package check; all package scripts exited successfully.
+
+Remaining risks:
+
+- No real PostgreSQL, Redis, S3, OIDC provider, or OpenTelemetry collector was started in this environment.
+- Alembic is represented by an importable migration module and deployment entrypoint; no live database migration was applied.
+- Docker, Compose, Kubernetes, signing, and mobile release files are validated as manifests/configuration, not executed against a cluster or signing service.
+- Enterprise rate limiting is represented by domain shape and telemetry/security tests; an HTTP middleware limiter remains a production integration task.
+- The production worker consumer is a deployable placeholder pending a real Redis queue runtime.

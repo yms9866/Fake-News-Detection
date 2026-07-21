@@ -1,0 +1,16 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      FND_ENVIRONMENT: local
+  redis:
+    image: redis:7-alpine
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: fnd-local
+      POSTGRES_DB: fnd

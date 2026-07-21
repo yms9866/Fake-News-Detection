@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fnd-migrations
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrations
+          image: fnd-api:local
+          command: ["python", "-m", "infra.alembic.run_migrations"]
+          envFrom:
+            - secretRef:
+                name: fnd-secrets
