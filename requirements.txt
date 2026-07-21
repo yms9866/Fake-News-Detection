@@ -13,5 +13,5 @@ pillow>=10.2.0
 pytesseract>=0.3.10
 openai-whisper>=20231117
 opencv-python>=4.9.0
-ddg>=6.1.7
+ddgs
 openai>=1.12.0

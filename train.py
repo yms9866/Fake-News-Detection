@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -77,10 +78,11 @@ def parse_args() -> argparse.Namespace:
         help="Learning rate. Default: 2e-5",
     )
 
+    # SECURE DEFAULT: Points directly to your persistent Google Drive storage
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("models/modernbert_fake_news"),
+        default=Path("/content/drive/MyDrive/modernbert_fake_news_512"),
         help="Directory to save trained model.",
     )
 
@@ -110,6 +112,8 @@ def compute_metrics(eval_pred) -> dict:
 
 
 def main() -> None:
+    
+
     args = parse_args()
 
     print("====================================================")
@@ -169,33 +173,35 @@ def main() -> None:
     )
 
     training_args = TrainingArguments(
-        output_dir=str(args.output),
+    output_dir=str(args.output),
 
-        learning_rate=args.learning_rate,
-        weight_decay=0.01,
-        num_train_epochs=args.epochs,
+    learning_rate=args.learning_rate,
+    weight_decay=0.01,
+    num_train_epochs=args.epochs,
 
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
-        gradient_accumulation_steps=args.grad_accum,
+    per_device_train_batch_size=args.batch_size,
+    per_device_eval_batch_size=args.batch_size,
+    gradient_accumulation_steps=args.grad_accum,
 
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        logging_strategy="steps",
-        logging_steps=50,
+    # MODIFIED FOR STEP-BASED SAVING:
+    eval_strategy="steps",       # Evaluate model every X steps
+    eval_steps=500,              # How often to run evaluation
+    save_strategy="steps",       # Save checkpoints every X steps
+    save_steps=500,              # How often to save a checkpoint to Drive
 
-        load_best_model_at_end=True,
-        metric_for_best_model="macro_f1",
-        greater_is_better=True,
+    load_best_model_at_end=True,
+    metric_for_best_model="macro_f1",
+    greater_is_better=True,
 
-        fp16=torch.cuda.is_available(),
-        bf16=False,
+    fp16=torch.cuda.is_available(),
+    bf16=False,
 
-        save_total_limit=2,
-        report_to="none",
+    save_total_limit=2,
+    report_to="none",
 
-        remove_unused_columns=True,
-    )
+    remove_unused_columns=True,
+)
+
 
     trainer = Trainer(
         model=model,
@@ -206,8 +212,24 @@ def main() -> None:
         compute_metrics=compute_metrics,
     )
 
-    print("\n?? Training ModernBERT style/risk classifier...")
-    trainer.train()
+    # AUTOMATION: Smart checkpoint discovery scan
+    checkpoint_exists = False
+    if os.path.exists(args.output):
+        try:
+            checkpoints = [d for d in os.listdir(args.output) if d.startswith("checkpoint-")]
+            if len(checkpoints) > 0:
+                checkpoint_exists = True
+        except Exception:
+            pass
+
+    print("\n🚀 Training ModernBERT style/risk classifier...")
+    
+    if checkpoint_exists:
+        print("🔄 Found existing checkpoints in Google Drive! Resuming training...")
+        trainer.train(resume_from_checkpoint=True)
+    else:
+        print("🌱 No checkpoints found. Starting a fresh training run...")
+        trainer.train()
 
     print("\n--- Validation Evaluation ---")
     val_predictions = trainer.predict(tokenized_ds["validation"])

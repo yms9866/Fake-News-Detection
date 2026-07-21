@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 import os
 import platform
@@ -30,17 +31,22 @@ except ImportError:
 
 
 GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+PROJECT_ROOT = Path(__file__).resolve().parent
+ENV_FILE = PROJECT_ROOT / ".env"
+MIN_LOCAL_STYLE_WORDS = 20
 
 if platform.system() == "Windows":
     pytesseract.pytesseract.tesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 
 
 def parse_args() -> argparse.Namespace:
+    load_env_file()
+
     parser = argparse.ArgumentParser(
         description="Predict fake-news risk using a local Transformer style/risk model and Gemini evidence verification."
     )
 
-    parser.add_argument("--model", type=Path, default=Path("models/modernbert_fake_news"))
+    parser.add_argument("--model", type=Path, default=Path("models/modernbert_fake_news_512"))
     parser.add_argument("--text", type=str, default=None)
     parser.add_argument("--url", type=str, default=None)
     parser.add_argument("--file", type=Path, default=None)
@@ -59,6 +65,29 @@ def normalize_text(text: str) -> str:
     return text.strip()
 
 
+def load_env_file(path: Path = ENV_FILE) -> None:
+    if not path.is_file():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            continue
+
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+
+        os.environ.setdefault(key, value)
+
+
 def truncate_for_display(text: str, limit: int = 220) -> str:
     text = normalize_text(text)
     if len(text) <= limit:
@@ -68,18 +97,55 @@ def truncate_for_display(text: str, limit: int = 220) -> str:
 
 def local_label_to_signal(verdict: str | None) -> str:
     if verdict == "REAL":
-        return "REAL-LIKE"
+        return "LOW STYLE RISK"
     if verdict == "FAKE":
-        return "FAKE-LIKE"
+        return "HIGH STYLE RISK"
     return "UNKNOWN"
+
+
+def count_words(text: str) -> int:
+    return len(normalize_text(text).split())
+
+
+def local_style_scope_warning(text: str) -> str | None:
+    word_count = count_words(text)
+
+    if word_count >= MIN_LOCAL_STYLE_WORDS:
+        return None
+
+    word_label = "word" if word_count == 1 else "words"
+    return (
+        f"Short input ({word_count} {word_label}). The local model is an article-style "
+        "classifier, so this score is unreliable for factual verification. Use --deep-check."
+    )
 
 
 def make_search_query(text: str, max_words: int = 32) -> str:
     text = normalize_text(text)
     text = re.sub(r"https?://\S+|www\.\S+", " ", text)
     words = text.split()
-    base_query = " ".join(words[:max_words])
-    return f'\"{base_query}\" OR {base_query} fact check official source'
+    base_query = " ".join(words[:max_words]).strip(" \"'")
+
+    if not base_query:
+        return "fact check official source"
+
+    return f"{base_query} fact check official source {date.today().isoformat()}"
+
+
+def get_gemini_api_key() -> str | None:
+    return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+
+
+def missing_gemini_key_result() -> dict[str, Any]:
+    return {
+        "verdict": "ERROR",
+        "evidence_quality": "LOW",
+        "explanation": "Gemini API key is missing.",
+        "evidence_summary": [],
+        "recommendation": (
+            "Fill GEMINI_API_KEY in .env (or set GOOGLE_API_KEY) and run with --deep-check again."
+        ),
+    }
 
 
 def parse_ai_json(raw_output: str) -> dict[str, Any]:
@@ -259,8 +325,8 @@ def read_input_text(args: argparse.Namespace) -> str:
 def predict_local_style_signal(text: str, model_path: Path, max_length: int = 1024) -> tuple[str, float]:
     """
     Internal labels:
-    - REAL = real-like writing style
-    - FAKE = fake-like writing style
+    - REAL = low-risk style similar to real training articles
+    - FAKE = high-risk style similar to fake training articles
 
     This is not final factual truth.
     """
@@ -324,16 +390,10 @@ def search_web_context(query_text: str, max_results: int = 6) -> str:
 def evaluate_with_gemini(claim_text: str, web_context: str, model_name: str) -> dict[str, Any]:
     print("[Gemini] Verifying claim against retrieved evidence.")
 
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = get_gemini_api_key()
 
     if not api_key:
-        return {
-            "verdict": "ERROR",
-            "evidence_quality": "LOW",
-            "explanation": "GEMINI_API_KEY is missing.",
-            "evidence_summary": [],
-            "recommendation": "Set GEMINI_API_KEY and run again with --deep-check.",
-        }
+        return missing_gemini_key_result()
 
     client = OpenAI(api_key=api_key, base_url=GEMINI_OPENAI_BASE_URL)
 
@@ -511,6 +571,9 @@ def print_final_report(
         print(f"ML Signal: {local_label_to_signal(ml_verdict)}")
         print(f"Style Confidence: {ml_confidence:.2%}")
         print("Interpretation: This layer checks writing/style patterns only. It does not prove whether the claim is factually true.")
+        warning = local_style_scope_warning(text)
+        if warning:
+            print(f"Scope Warning: {warning}")
 
     if ai_result is not None:
         print("\nLayer 2: Evidence-Based Verification")
@@ -576,7 +639,11 @@ def main() -> None:
 
         print(f"ML Signal:        {local_label_to_signal(ml_verdict)}")
         print(f"Style Confidence: {ml_confidence:.2%}")
-        print("Note: This is not factual verification.\n")
+        print("Note: This is not factual verification.")
+        warning = local_style_scope_warning(text)
+        if warning:
+            print(f"Scope Warning: {warning}")
+        print()
 
     except Exception as e:
         print(f"[ERROR] Local model prediction failed: {e}\n")
@@ -587,13 +654,17 @@ def main() -> None:
     if args.deep_check:
         print("--- LAYER 2: Live Web Search & Gemini Verification ---")
 
-        web_context = search_web_context(query_text=text, max_results=args.max_search_results)
+        if not get_gemini_api_key():
+            print("[Gemini] API key is missing; skipping live web search and Gemini verification.")
+            ai_result = missing_gemini_key_result()
+        else:
+            web_context = search_web_context(query_text=text, max_results=args.max_search_results)
 
-        ai_result = evaluate_with_gemini(
-            claim_text=text,
-            web_context=web_context,
-            model_name=args.gemini_model,
-        )
+            ai_result = evaluate_with_gemini(
+                claim_text=text,
+                web_context=web_context,
+                model_name=args.gemini_model,
+            )
 
         print(f"Gemini Verdict:   {ai_result['verdict']}")
         print(f"Evidence Quality: {ai_result['evidence_quality']}")
