@@ -1,12 +1,21 @@
-// Slice 1 stub: desktop will consume generated contracts in a later slice.
-
 export type {
-  AnalysisInputType,
+  AnalysisStatus,
   AnalysisResponse,
   AnalyzeTextRequest,
   AnalyzeUrlRequest,
+  ApiErrorResponse,
+  HealthResponse,
+  InputTypeCode,
   JobResponse,
-  JobStatus,
+  JobProgressEvent,
+  JobStatusCode,
   MediaAnalysisAccepted,
-  MediaType,
-} from "../../../../extension/src/shared/contracts";
+  MediaAnalysisResult,
+  MediaTypeCode,
+  ModelsResponse,
+  PendingAnalysisResponse,
+  Quality,
+  ReadinessResponse,
+  StyleSignal,
+  VerificationResponse
+} from "../../../../../packages/contracts/typescript/api";

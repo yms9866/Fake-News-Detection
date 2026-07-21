@@ -11,3 +11,4 @@ node_modules/
 .pnpm-store/
 pnpm-lock.yaml
 apps/extension/dist/
+apps/desktop/dist/
