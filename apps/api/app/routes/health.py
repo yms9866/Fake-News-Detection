@@ -109,6 +109,18 @@ def ready(
                 ),
             )
         )
+    plugin_count = (
+        len(container.forensic_plugins.list_plugins())
+        if container.forensic_plugins is not None
+        else 0
+    )
+    components.append(
+        ComponentStatus(
+            name="forensic_plugin_registry",
+            status="configured" if plugin_count else "disabled",
+            detail=f"{plugin_count} forensic plugins registered.",
+        )
+    )
 
     return ReadinessResponse(
         status="ready" if model_exists else "unready",

@@ -1538,6 +1538,27 @@
           }
         }
       }
+    },
+    "/v1/forensic-plugins": {
+      "get": {
+        "tags": [
+          "forensic plugins"
+        ],
+        "summary": "List Forensic Plugins",
+        "operationId": "list_forensic_plugins_v1_forensic_plugins_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForensicPluginsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1679,6 +1700,13 @@
                 "type": "null"
               }
             ]
+          },
+          "forensic_results": {
+            "items": {
+              "$ref": "#/components/schemas/ForensicPluginResultResponse"
+            },
+            "type": "array",
+            "title": "Forensic Results"
           },
           "final_verdict": {
             "type": "string",
@@ -2033,6 +2061,212 @@
           "media_type"
         ],
         "title": "ExtractionMetadata"
+      },
+      "ForensicPluginInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "supported_media_types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "image",
+                "audio",
+                "video"
+              ]
+            },
+            "type": "array",
+            "title": "Supported Media Types"
+          },
+          "required_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Capabilities"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "readiness_detail": {
+            "type": "string",
+            "title": "Readiness Detail",
+            "default": ""
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "supported_media_types",
+          "enabled",
+          "ready",
+          "provider"
+        ],
+        "title": "ForensicPluginInfo"
+      },
+      "ForensicPluginResultResponse": {
+        "properties": {
+          "plugin_name": {
+            "type": "string",
+            "title": "Plugin Name"
+          },
+          "plugin_version": {
+            "type": "string",
+            "title": "Plugin Version"
+          },
+          "media_type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "audio",
+              "video"
+            ],
+            "title": "Media Type"
+          },
+          "signal": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "SUSPICIOUS",
+              "INCONCLUSIVE",
+              "ERROR"
+            ],
+            "title": "Signal"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "scope_reliable": {
+            "type": "boolean",
+            "title": "Scope Reliable"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "failure_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Class"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plugin_name",
+          "plugin_version",
+          "media_type",
+          "signal",
+          "scope_reliable"
+        ],
+        "title": "ForensicPluginResultResponse"
+      },
+      "ForensicPluginsResponse": {
+        "properties": {
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/ForensicPluginInfo"
+            },
+            "type": "array",
+            "title": "Plugins"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "trace_id"
+        ],
+        "title": "ForensicPluginsResponse"
       },
       "HTTPValidationError": {
         "properties": {

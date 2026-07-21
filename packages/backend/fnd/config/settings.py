@@ -76,6 +76,9 @@ class Settings:
     oidc_client_id: str | None = None
     otel_endpoint: str | None = None
     enterprise_mode: bool = False
+    enable_forensic_plugins: bool = True
+    forensic_plugin_timeout_seconds: float = 2.0
+    forensic_plugin_concurrency: int = 2
 
     @classmethod
     def from_environment(cls, project_root: Path | None = None) -> "Settings":
@@ -158,4 +161,14 @@ class Settings:
             otel_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or None,
             enterprise_mode=os.environ.get("ENTERPRISE_MODE", "false").lower()
             in {"1", "true", "yes"},
+            enable_forensic_plugins=os.environ.get(
+                "ENABLE_FORENSIC_PLUGINS", "true"
+            ).lower()
+            not in {"0", "false", "no"},
+            forensic_plugin_timeout_seconds=float(
+                os.environ.get("FORENSIC_PLUGIN_TIMEOUT_SECONDS", "2.0")
+            ),
+            forensic_plugin_concurrency=int(
+                os.environ.get("FORENSIC_PLUGIN_CONCURRENCY", "2")
+            ),
         )

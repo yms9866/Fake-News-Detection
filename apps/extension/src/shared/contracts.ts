@@ -4,6 +4,7 @@
 
 export type AnalysisInputType = "text" | "url" | "file" | "unknown";
 export type MediaType = "image" | "audio" | "video";
+export type ForensicSignal = "NONE" | "SUSPICIOUS" | "INCONCLUSIVE" | "ERROR";
 export type LiveSourceType = "screen" | "window" | "region" | "browser_tab";
 export type LiveSessionStatus =
   | "created"
@@ -83,6 +84,21 @@ export interface VerificationResponse {
   error: string | null;
 }
 
+export interface ForensicPluginResultResponse {
+  plugin_name: string;
+  plugin_version: string;
+  media_type: MediaType;
+  signal: ForensicSignal;
+  confidence: number | null;
+  scope_reliable: boolean;
+  evidence: string[];
+  warnings: string[];
+  model_version: string | null;
+  latency_ms: number | null;
+  failure_class: string | null;
+  metadata: Record<string, unknown>;
+}
+
 export interface AnalysisResponse {
   analysis_id: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -98,6 +114,7 @@ export interface AnalysisResponse {
   style_minimum_word_count: number;
   style_warning: string | null;
   verification: VerificationResponse | null;
+  forensic_results: ForensicPluginResultResponse[];
   final_verdict: string;
   confidence: Quality;
   reason: string;

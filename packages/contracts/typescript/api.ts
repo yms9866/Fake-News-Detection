@@ -8,6 +8,7 @@ export type Quality = "HIGH" | "MEDIUM" | "LOW";
 export type InputTypeCode = "text" | "url" | "file" | "unknown";
 export type StyleSignal = "LOW_STYLE_RISK" | "HIGH_STYLE_RISK" | "UNKNOWN" | "ERROR";
 export type MediaTypeCode = "image" | "audio" | "video";
+export type ForensicSignalCode = "NONE" | "SUSPICIOUS" | "INCONCLUSIVE" | "ERROR";
 export type LiveSourceTypeCode = "screen" | "window" | "region" | "browser_tab";
 export type LiveSessionStatusCode =
   | "created"
@@ -125,6 +126,21 @@ export interface VerificationResponse {
   error: string | null;
 }
 
+export interface ForensicPluginResultResponse {
+  plugin_name: string;
+  plugin_version: string;
+  media_type: MediaTypeCode;
+  signal: ForensicSignalCode;
+  confidence: number | null;
+  scope_reliable: boolean;
+  evidence: string[];
+  warnings: string[];
+  model_version: string | null;
+  latency_ms: number | null;
+  failure_class: string | null;
+  metadata: Record<string, unknown>;
+}
+
 export interface AnalysisResponse {
   analysis_id: string;
   status: AnalysisStatus;
@@ -142,6 +158,7 @@ export interface AnalysisResponse {
   style_minimum_word_count: number;
   style_warning: string | null;
   verification: VerificationResponse | null;
+  forensic_results: ForensicPluginResultResponse[];
   final_verdict: string;
   confidence: Quality;
   reason: string;
@@ -349,6 +366,24 @@ export interface ModelInfo {
 
 export interface ModelsResponse {
   models: ModelInfo[];
+  request_id: string;
+  trace_id: string;
+}
+
+export interface ForensicPluginInfo {
+  name: string;
+  version: string;
+  supported_media_types: MediaTypeCode[];
+  required_capabilities: string[];
+  enabled: boolean;
+  ready: boolean;
+  readiness_detail: string;
+  model_version: string | null;
+  provider: string;
+}
+
+export interface ForensicPluginsResponse {
+  plugins: ForensicPluginInfo[];
   request_id: string;
   trace_id: string;
 }

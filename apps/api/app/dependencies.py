@@ -19,6 +19,7 @@ from packages.backend.fnd.adapters.live.in_memory import (
     InMemoryLiveSessionEventRepository,
 )
 from packages.backend.fnd.application.services.live_ocr import LiveOcrSessionService
+from packages.backend.fnd.application.services.forensics import ForensicPluginRegistry
 
 from .state import ApiContainer, InMemoryAnalysisRepository, ModelRegistry
 
@@ -73,3 +74,9 @@ def get_live_event_repository(request: Request) -> InMemoryLiveSessionEventRepos
     repository = get_container(request).live_events
     assert repository is not None
     return repository
+
+
+def get_forensic_plugin_registry(request: Request) -> ForensicPluginRegistry:
+    registry = get_container(request).forensic_plugins
+    assert registry is not None
+    return registry

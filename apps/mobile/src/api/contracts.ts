@@ -2,6 +2,8 @@ export type {
   AnalysisResponse,
   AnalyzeTextRequest,
   AnalyzeUrlRequest,
+  ForensicPluginResultResponse,
+  ForensicSignalCode,
   JobResponse,
   MediaAnalysisAccepted,
   MediaTypeCode,

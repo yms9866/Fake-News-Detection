@@ -12,8 +12,10 @@ from uuid import uuid4
 from packages.backend.fnd.application.workflows.analyze_content import (
     AnalyzeContentWorkflow,
 )
+from packages.backend.fnd.application.services.forensics import ForensicPluginRegistry
 from packages.backend.fnd.config.settings import Settings
 from packages.backend.fnd.domain.entities import ExtractedDocument, normalize_text
+from packages.backend.fnd.domain.forensics import ForensicPluginResult
 from packages.backend.fnd.domain.enums import InputType, JobStatus, MediaType
 from packages.backend.fnd.domain.errors import (
     FndError,
@@ -373,6 +375,7 @@ class MediaAnalysisJobService:
         events: JobEventRepository,
         analyses: AnalysisResultRepository,
         media_preprocessor: MediaPreprocessor,
+        forensic_plugins: ForensicPluginRegistry | None = None,
     ) -> None:
         self._settings = settings
         self._workflow = workflow
@@ -381,6 +384,7 @@ class MediaAnalysisJobService:
         self._events = events
         self._analyses = analyses
         self._media_preprocessor = media_preprocessor
+        self._forensic_plugins = forensic_plugins or ForensicPluginRegistry()
 
     def cancel(self, job_id: str) -> AnalysisJob:
         job = self._jobs.get(job_id)
@@ -468,10 +472,16 @@ class MediaAnalysisJobService:
 
             cancellation.throw_if_cancelled()
             self._transition(job, JobStatus.CLEANING, 55, "Cleaning extracted text")
+            forensic_results = self._forensic_plugins.analyze_artifact(
+                artifact=artifact,
+                metadata=metadata,
+                timeout_seconds=self._settings.forensic_plugin_timeout_seconds,
+            )
             document = self._document_with_media_metadata(
                 document=document,
                 metadata=metadata,
                 extraction_metadata=extraction_metadata,
+                forensic_results=forensic_results,
             )
 
             if not normalize_text(document.text):
@@ -564,12 +574,16 @@ class MediaAnalysisJobService:
         document: ExtractedDocument,
         metadata: MediaMetadata,
         extraction_metadata: ExtractionMetadata,
+        forensic_results: list[ForensicPluginResult] | None = None,
     ) -> ExtractedDocument:
         merged_metadata = {
             **document.metadata,
             "media_type": metadata.media_type.value,
             "media_metadata": metadata.public_dict(),
             "extraction_metadata": extraction_metadata.public_dict(),
+            "forensic_results": [
+                result.public_dict() for result in (forensic_results or [])
+            ],
         }
         return replace(
             document,

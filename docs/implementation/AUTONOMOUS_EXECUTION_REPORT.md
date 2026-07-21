@@ -715,3 +715,144 @@ Remaining risks:
 - Docker, Compose, Kubernetes, signing, and mobile release files are validated as manifests/configuration, not executed against a cluster or signing service.
 - Enterprise rate limiting is represented by domain shape and telemetry/security tests; an HTTP middleware limiter remains a production integration task.
 - The production worker consumer is a deployable placeholder pending a real Redis queue runtime.
+
+## Slice 10 - Multimodal Forensic Plugin Framework
+
+Date: 2026-07-22
+
+Baseline:
+
+- Branch: `staging`
+- Starting commit: `0a1c347 feat: implement slice 9 enterprise hardening`
+- Starting tag: `slice-9-complete`
+
+Plan:
+
+1. Preserve all Slice 1-9 behavior and keep final verdict decisions in the deterministic policy.
+2. Add an advisory-only forensic plugin domain, port, registry, and deterministic test adapters.
+3. Integrate enabled plugins into media jobs without letting plugin output crash extraction or set `REAL`/`FAKE`.
+4. Expose plugin discovery through the API and synchronize Python, TypeScript, and OpenAPI contracts.
+5. Add tests for registration, disable/enable, readiness, timeout, failure isolation, aggregation, version reporting, warnings, and verdict isolation.
+6. Run the complete backend and client verification matrix.
+
+Implemented:
+
+- Forensic plugin domain:
+  - plugin metadata
+  - readiness
+  - plugin request
+  - plugin result
+  - advisory signals: `NONE`, `SUSPICIOUS`, `INCONCLUSIVE`, `ERROR`
+  - structured failure results
+- Forensic plugin port:
+  - `metadata`
+  - `readiness`
+  - `analyze`
+- Registry and orchestration:
+  - plugin registration
+  - duplicate registration protection
+  - enable/disable
+  - discovery
+  - readiness isolation
+  - timeout handling
+  - exception isolation
+  - concurrency limit
+  - deterministic ordering
+  - graceful executor shutdown
+- Deterministic fake forensic plugin adapter for local tests and smoke checks.
+- Media job integration:
+  - enabled plugins run after media extraction and before shared analysis
+  - plugin results are attached to document metadata as `forensic_results`
+  - plugin failures become advisory `ERROR` results
+  - suspicious plugin signals add warnings only
+  - final verdict remains produced by the existing workflow and verdict policy
+- API and contracts:
+  - `GET /v1/forensic-plugins`
+  - Python `ForensicPluginResultResponse`
+  - Python `ForensicPluginInfo`
+  - Python `ForensicPluginsResponse`
+  - TypeScript forensic signal and response contracts
+  - OpenAPI schema update
+  - client contract barrel exports updated for desktop, web, mobile, and extension
+  - readiness reports `forensic_plugin_registry`
+
+Changed files:
+
+- `apps/api/app/dependencies.py`
+- `apps/api/app/factory.py`
+- `apps/api/app/routes/forensics.py`
+- `apps/api/app/routes/health.py`
+- `apps/api/app/serializers.py`
+- `apps/api/app/state.py`
+- `apps/desktop/src/renderer/api/contracts.ts`
+- `apps/extension/src/shared/contracts.ts`
+- `apps/mobile/src/api/contracts.ts`
+- `apps/web/src/api/contracts.ts`
+- `packages/backend/fnd/adapters/forensics/__init__.py`
+- `packages/backend/fnd/adapters/forensics/fakes.py`
+- `packages/backend/fnd/application/services/forensics.py`
+- `packages/backend/fnd/application/services/media_jobs.py`
+- `packages/backend/fnd/config/settings.py`
+- `packages/backend/fnd/domain/forensics.py`
+- `packages/backend/fnd/ports/forensics.py`
+- `packages/contracts/openapi/openapi.json`
+- `packages/contracts/python/analysis_contracts.py`
+- `packages/contracts/typescript/api.ts`
+- `tests/test_forensic_plugins_slice10.py`
+- `docs/implementation/AUTONOMOUS_EXECUTION_REPORT.md`
+
+Verification:
+
+- `git status --short`: clean before starting Slice 10.
+- `git branch --show-current`: `staging`.
+- `git log -5 --oneline`: Slice 9 commit present at `0a1c347`.
+- `python -m unittest tests.test_forensic_plugins_slice10`: 10 tests passed.
+- `python -m unittest discover -s tests`: 120 tests passed.
+- `python -m compileall predict.py apps packages tests infra`: passed.
+- `python -m ruff check apps packages tests predict.py infra`: passed.
+- `python -m black --check apps packages tests predict.py infra`: passed.
+- `python -m mypy apps packages tests predict.py infra`: passed, 109 source files checked.
+- `python -m apps.api.scripts.export_openapi --output packages/contracts/openapi/openapi.json`: passed.
+- `pnpm install --no-lockfile`: passed for all 4 workspace projects.
+- Mobile checks:
+  - `pnpm --filter mobile build`: passed.
+  - `pnpm --filter mobile typecheck`: passed, 13 built JS files checked.
+  - `pnpm --filter mobile lint`: passed, 20 files checked.
+  - `pnpm --filter mobile test`: 26 tests passed.
+  - `pnpm --filter mobile test:e2e`: 4 tests passed after rerunning alone.
+- Web checks:
+  - `pnpm --filter web build`: passed.
+  - `pnpm --filter web typecheck`: passed, 11 built JS files checked.
+  - `pnpm --filter web lint`: passed, 20 files checked.
+  - `pnpm --filter web test`: 23 tests passed.
+  - `pnpm --filter web test:e2e`: 6 tests passed.
+- Desktop checks:
+  - `pnpm --filter desktop build`: passed.
+  - `pnpm --filter desktop typecheck`: passed, 28 built JS files checked.
+  - `pnpm --filter desktop lint`: passed, 41 files checked.
+  - `pnpm --filter desktop test`: 53 tests passed.
+  - `pnpm --filter desktop test:e2e`: 4 tests passed.
+- Extension checks:
+  - `pnpm --filter extension build`: passed.
+  - `pnpm --filter extension typecheck`: passed, 25 built JS files checked.
+  - `pnpm --filter extension lint`: passed, 38 files checked.
+  - `pnpm --filter extension test`: 18 tests passed.
+  - `pnpm --filter extension test:e2e`: 1 test passed.
+- Domain/application FastAPI scan: no matches.
+- Forensic plugin verdict-bypass scan: plugin implementation does not set final verdicts; verdict references are confined to test workflow fixtures.
+- Secret scan: no real provider secrets found; matches were existing provider key-name guards or tests.
+- pnpm regenerated local `node_modules`, `.pnpm-store`, and `pnpm-lock.yaml`; those ignored artifacts were removed after path verification.
+
+Notes:
+
+- Root-level `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm build` were not available because this repository has no root `package.json`. The equivalent package-specific scripts were run for all workspace projects.
+- The first mobile `test:e2e` attempt ran in parallel with another mobile script and failed on a temporary `dist` directory race. It was rerun by itself and passed.
+- pnpm printed the expected metadata update warning under restricted network; all package scripts exited successfully.
+- Forensic plugins are advisory by design and do not claim production forensic accuracy.
+
+Remaining risks:
+
+- No real image manipulation, synthetic image, reverse-image, metadata, synthetic speech, voice clone, deepfake, face swap, lip-sync, logo, or source recognition model was installed or validated.
+- Plugin timeout cancellation is best-effort for running Python threads; timed-out plugins are isolated from the response path but the underlying function may finish shortly afterward.
+- The API exposes plugin discovery and analysis response contracts; no dedicated forensic-results UI was added to each client beyond contract compatibility.
+- Future policy changes that allow forensic signals to affect final verdicts still require an ADR, policy-version bump, and tests.

@@ -21,6 +21,7 @@ from packages.backend.fnd.adapters.live.in_memory import (
 from packages.backend.fnd.adapters.media.artifacts import TemporaryLocalArtifactStore
 from packages.backend.fnd.adapters.media.preprocessors import LocalMediaPreprocessor
 from packages.backend.fnd.adapters.media.probe import LocalMediaProbe
+from packages.backend.fnd.application.services.forensics import ForensicPluginRegistry
 from packages.backend.fnd.application.services.media_jobs import (
     MediaAnalysisJobService,
     MediaAnalysisSubmissionService,
@@ -178,8 +179,16 @@ class ApiContainer:
     live_sessions: InMemoryLiveSessionRepository | None = None
     live_events: InMemoryLiveSessionEventRepository | None = None
     live_service: LiveOcrSessionService | None = None
+    forensic_plugins: ForensicPluginRegistry | None = None
 
     def __post_init__(self) -> None:
+        self.forensic_plugins = self.forensic_plugins or ForensicPluginRegistry(
+            default_timeout_seconds=self.settings.forensic_plugin_timeout_seconds,
+            concurrency_limit=self.settings.forensic_plugin_concurrency,
+        )
+        if not self.settings.enable_forensic_plugins:
+            for plugin in self.forensic_plugins.list_plugins():
+                self.forensic_plugins.disable(plugin.metadata.name)
         self.jobs = self.jobs or InMemoryJobRepository()
         self.job_events = self.job_events or InMemoryJobEventRepository(
             retention_limit=self.settings.job_event_retention_limit
@@ -196,6 +205,7 @@ class ApiContainer:
         assert self.jobs is not None
         assert self.job_events is not None
         assert self.media_preprocessor is not None
+        assert self.forensic_plugins is not None
         self.job_service = self.job_service or MediaAnalysisJobService(
             settings=self.settings,
             workflow=self.workflow,
@@ -204,6 +214,7 @@ class ApiContainer:
             events=self.job_events,
             analyses=self.analyses,
             media_preprocessor=self.media_preprocessor,
+            forensic_plugins=self.forensic_plugins,
         )
         assert self.job_service is not None
         self.job_queue = self.job_queue or InProcessJobQueue(
@@ -243,6 +254,8 @@ class ApiContainer:
     def stop(self) -> None:
         if self.job_queue is not None:
             self.job_queue.stop()
+        if self.forensic_plugins is not None:
+            self.forensic_plugins.close()
 
     @classmethod
     def from_workflow(

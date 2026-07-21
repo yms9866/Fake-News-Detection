@@ -1,0 +1,1 @@
+"""Optional forensic plugin adapters."""

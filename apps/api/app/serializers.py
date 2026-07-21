@@ -21,6 +21,7 @@ from packages.contracts.python.analysis_contracts import (
     AnalysisResponse,
     EvidenceSummaryItem,
     ExtractionMetadata,
+    ForensicPluginResultResponse,
     JobError,
     JobProgressEvent,
     JobResponse,
@@ -61,6 +62,14 @@ def _warnings(result: AnalysisResult) -> list[str]:
     if result.evidence is not None and result.evidence.error:
         warnings.append("Evidence provider failed. The final verdict is UNVERIFIED.")
 
+    for item in _forensic_results(result):
+        for warning in item.warnings:
+            warnings.append(f"Forensic advisory ({item.plugin_name}): {warning}")
+        if item.signal == "SUSPICIOUS":
+            warnings.append(
+                f"Forensic advisory ({item.plugin_name}) reported a suspicious signal."
+            )
+
     return warnings
 
 
@@ -99,6 +108,17 @@ def _verification(result: AnalysisResult) -> VerificationResponse | None:
     )
 
 
+def _forensic_results(result: AnalysisResult) -> list[ForensicPluginResultResponse]:
+    raw_results = result.document.metadata.get("forensic_results", [])
+    if not isinstance(raw_results, list):
+        return []
+    responses: list[ForensicPluginResultResponse] = []
+    for item in raw_results:
+        if isinstance(item, dict):
+            responses.append(ForensicPluginResultResponse.model_validate(item))
+    return responses
+
+
 def analysis_response_from_result(
     result: AnalysisResult,
     *,
@@ -132,6 +152,7 @@ def analysis_response_from_result(
         style_minimum_word_count=result.style.minimum_word_count,
         style_warning=result.style.warning,
         verification=_verification(result),
+        forensic_results=_forensic_results(result),
         final_verdict=result.final.verdict.value,
         confidence=result.final.confidence.value,
         reason=result.final.reason,

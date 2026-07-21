@@ -12,6 +12,7 @@ Quality = Literal["HIGH", "MEDIUM", "LOW"]
 InputTypeCode = Literal["text", "url", "file", "unknown"]
 StyleSignal = Literal["LOW_STYLE_RISK", "HIGH_STYLE_RISK", "UNKNOWN", "ERROR"]
 MediaTypeCode = Literal["image", "audio", "video"]
+ForensicSignalCode = Literal["NONE", "SUSPICIOUS", "INCONCLUSIVE", "ERROR"]
 LiveSourceTypeCode = Literal["screen", "window", "region", "browser_tab"]
 LiveSessionStatusCode = Literal[
     "created",
@@ -354,6 +355,23 @@ class VerificationResponse(BaseModel):
     error: str | None = None
 
 
+class ForensicPluginResultResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plugin_name: str
+    plugin_version: str
+    media_type: MediaTypeCode
+    signal: ForensicSignalCode
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    scope_reliable: bool
+    evidence: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    model_version: str | None = None
+    latency_ms: float | None = None
+    failure_class: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class AnalysisResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -373,6 +391,7 @@ class AnalysisResponse(BaseModel):
     style_minimum_word_count: int
     style_warning: str | None = None
     verification: VerificationResponse | None
+    forensic_results: list[ForensicPluginResultResponse] = Field(default_factory=list)
     final_verdict: str
     confidence: Quality
     reason: str
@@ -424,5 +443,27 @@ class ModelsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     models: list[ModelInfo]
+    request_id: str
+    trace_id: str
+
+
+class ForensicPluginInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    version: str
+    supported_media_types: list[MediaTypeCode]
+    required_capabilities: list[str] = Field(default_factory=list)
+    enabled: bool
+    ready: bool
+    readiness_detail: str = ""
+    model_version: str | None = None
+    provider: str
+
+
+class ForensicPluginsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plugins: list[ForensicPluginInfo] = Field(default_factory=list)
     request_id: str
     trace_id: str

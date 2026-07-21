@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .composition import build_container
 from .errors import register_error_handlers
 from .middleware import RequestContextMiddleware
-from .routes import analyses, health, jobs, live, media, models
+from .routes import analyses, forensics, health, jobs, live, media, models
 from .state import ApiContainer
 
 DEFAULT_ALLOWED_ORIGINS = [
@@ -60,5 +60,6 @@ def create_app(
     app.include_router(media.router, prefix="/v1")
     app.include_router(jobs.router, prefix="/v1")
     app.include_router(live.router, prefix="/v1")
+    app.include_router(forensics.router, prefix="/v1")
 
     return app
