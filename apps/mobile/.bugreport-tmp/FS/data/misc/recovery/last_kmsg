@@ -1,0 +1,40 @@
+cc=10 chg=
+[24009.744835] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[24880.546468] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[24890.006571] servicemanager: Notifying artd they don't (previously: do) have clients when we now have no record of a client
+[24890.048476] servicemanager: Caller(pid=10791,uid=1082,sid=u:r:artd:s0) Unregistering artd
+[24890.050319] libbinder.BpBinder: onLastStrongRef automatically unlinking death recipients for descriptor: '(not cached)'
+[24890.250288] init: Service 'artd' (pid 10791) exited with status 0 oneshot service took 2381.727051 seconds in background
+[24890.266587] init: Sending SIGKILL to service 'artd' (pid 10791) process group...
+[24890.281641] libprocessgroup: Removed cgroup /sys/fs/cgroup/system/uid_1082/pid_10791
+[24895.276236] binder_alloc: 11734: pid 1414 spamming oneway? 1 buffers allocated for a total size of 447088
+[24895.307345] binder_alloc: 11734: pid 1414 spamming oneway? 1 buffers allocated for a total size of 447088
+[24895.378733] binder_alloc: 11734: pid 1414 spamming oneway? 2 buffers allocated for a total size of 447328
+[24895.384867] binder_alloc: 11734: pid 1414 spamming oneway? 3 buffers allocated for a total size of 452032
+[24895.520527] binder_alloc: 11734: pid 1414 spamming oneway? 2 buffers allocated for a total size of 451792
+[24895.589703] binder_alloc: 11734: pid 1414 spamming oneway? 1 buffers allocated for a total size of 447088
+[24902.861727] binder: undelivered TRANSACTION_COMPLETE
+[24902.863574] binder: undelivered transaction 3022025, process died.
+[24903.088568] binder: undelivered transaction 3022048, process died.
+[24903.090315] binder: undelivered transaction 3022049, process died.
+[24903.095734] binder: undelivered transaction 3022047, process died.
+[24905.704544] servicemanager: Caller(pid=279,uid=1017,sid=u:r:keystore:s0) Found android.hardware.security.keymint.IRemotelyProvisionedComponent/default in device VINTF manifest.
+[24906.030659] servicemanager: Caller(pid=12086,uid=10199,sid=u:r:rkpdapp:s0:c199,c256,c512,c768) Found android.hardware.security.keymint.IRemotelyProvisionedComponent/default in device VINTF manifest.
+[24906.185581] servicemanager: Caller(pid=279,uid=1017,sid=u:r:keystore:s0) Found android.hardware.security.keymint.IRemotelyProvisionedComponent/default in device VINTF manifest.
+[24912.427461] logd: start watching /data/system/packages.list ...
+[24912.439518] logd: ReadPackageList, total packages: 228
+[25120.687342] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[25209.743219] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[25360.696929] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[26491.445917] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[27009.782108] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[27466.398350] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[27609.743374] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[28209.741017] HealthLoop: wakealarm_event: read wakealarm fd failed
+[28209.745165] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[28306.480317] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[28568.311015] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[28809.744082] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=
+[29092.063629] type=1400 audit(1767310040.040:22): avc:  denied  { read } for  comm="AnrMainProcessD" name="transactions" dev="binder" ino=1048588 scontext=u:r:system_server:s0 tcontext=u:object_r:binderfs_logs_transactions:s0 tclass=file permissive=0
+[29097.881214] servicemanager: Caller(pid=796,uid=1000,sid=u:r:system_server:s0) Found android.hardware.wifi.IWifi/default in device VINTF manifest.
+[29409.744440] healthd: battery l=100 v=5000 t=25.0 h=2 st=4 c=900000 fc=3000000 cc=10 chg=

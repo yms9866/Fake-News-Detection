@@ -15,6 +15,28 @@ async function parseJsonSafe(response) {
   }
 }
 
+function statusFallbackCode(status) {
+  if (status === 400) {
+    return "DESKTOP_HTTP_400";
+  }
+  if (status === 401 || status === 403) {
+    return "DESKTOP_AUTHORIZATION_FAILED";
+  }
+  if (status === 404) {
+    return "DESKTOP_NOT_FOUND";
+  }
+  if (status === 422) {
+    return "DESKTOP_VALIDATION_ERROR";
+  }
+  if (status === 429) {
+    return "DESKTOP_RATE_LIMITED";
+  }
+  if (status >= 500) {
+    return "DESKTOP_SERVER_ERROR";
+  }
+  return "DESKTOP_BACKEND_ERROR";
+}
+
 function withTimeout(timeoutMs) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -22,11 +44,14 @@ function withTimeout(timeoutMs) {
 }
 
 export class DesktopApiError extends Error {
-  constructor(code, message, status = 0) {
+  constructor(code, message, status = 0, details = {}) {
     super(message);
     this.name = "DesktopApiError";
     this.code = code;
     this.status = status;
+    this.requestId = details.requestId || null;
+    this.traceId = details.traceId || null;
+    this.validationDetails = Array.isArray(details.validationDetails) ? details.validationDetails : [];
   }
 }
 
@@ -37,7 +62,7 @@ export class DesktopApiClient {
 
   configure(settings = {}) {
     this.backendOrigin = normalizeBackendOrigin(settings.backendOrigin || "http://127.0.0.1:8000");
-    this.requestTimeoutMs = validateTimeoutMs(settings.requestTimeoutMs, 15000);
+    this.requestTimeoutMs = validateTimeoutMs(settings.requestTimeoutMs, 60000);
     this.pairingToken = typeof settings.pairingToken === "string" && settings.pairingToken.trim()
       ? settings.pairingToken.trim()
       : null;
@@ -199,8 +224,17 @@ export class DesktopApiClient {
     if (payload && typeof payload === "object") {
       payload.request_id = payload.request_id || response.headers.get("X-Request-ID");
       payload.trace_id = payload.trace_id || response.headers.get("X-Trace-ID");
+      return payload;
     }
-    return payload;
+    throw new DesktopApiError(
+      "DESKTOP_MALFORMED_RESPONSE",
+      "The backend returned a response that was not valid JSON.",
+      response.status,
+      {
+        requestId: response.headers.get("X-Request-ID"),
+        traceId: response.headers.get("X-Trace-ID")
+      }
+    );
   }
 
   async request(path, init = {}) {
@@ -217,9 +251,13 @@ export class DesktopApiClient {
       });
       if (!response.ok) {
         const payload = await parseJsonSafe(response);
-        const errorCode = payload && payload.error_code ? payload.error_code : DESKTOP_ERROR_CODES.backendUnavailable;
+        const errorCode = payload && payload.error_code ? payload.error_code : statusFallbackCode(response.status);
         const message = payload && payload.message ? payload.message : "Backend request failed.";
-        throw new DesktopApiError(errorCode, message, response.status);
+        throw new DesktopApiError(errorCode, message, response.status, {
+          requestId: payload && payload.request_id ? payload.request_id : response.headers.get("X-Request-ID"),
+          traceId: payload && payload.trace_id ? payload.trace_id : response.headers.get("X-Trace-ID"),
+          validationDetails: payload && Array.isArray(payload.details) ? payload.details : []
+        });
       }
       return response;
     } catch (error) {

@@ -15,7 +15,7 @@ export function collectDiagnostics({ appInfo = {}, backendStatus = {}, settings 
     },
     settings: {
       backendOrigin: settings.backendOrigin || "http://127.0.0.1:8000",
-      requestTimeoutMs: settings.requestTimeoutMs || 15000,
+      requestTimeoutMs: settings.requestTimeoutMs || 60000,
       startupTimeoutMs: settings.startupTimeoutMs || 30000,
       pairingToken: settings.pairingToken ? "[configured]" : null
     },

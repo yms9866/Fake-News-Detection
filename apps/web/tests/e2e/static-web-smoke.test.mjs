@@ -40,3 +40,19 @@ test("web source does not implement verdict policy", async () => {
   assert.equal(/final_verdict\s*=\s*["']REAL/u.test(app), false);
   assert.equal(/final_verdict\s*=\s*["']FAKE/u.test(app), false);
 });
+
+test("web app creates one browser API client and avoids Electron globals", async () => {
+  const app = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const client = await readFile(new URL("../../src/api/client.ts", import.meta.url), "utf8");
+  const matches = app.match(/createWebApiClient\(/gu) || [];
+  assert.equal(matches.length, 1);
+  assert.equal(/desktopApi|ipcRenderer|electron/iu.test(app + client), false);
+  assert.match(app, /state\.lastRetry = \(\) => run\(operation\)/u);
+});
+
+test("result CSS keeps hierarchy and mobile source cards", async () => {
+  const css = await readFile(new URL("../../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /result-summary h2/u);
+  assert.match(css, /source-grid/u);
+  assert.match(css, /focus-visible/u);
+});

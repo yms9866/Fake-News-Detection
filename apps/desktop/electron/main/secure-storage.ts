@@ -5,7 +5,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   defaultDeepCheck: false,
   defaultMaxLength: 512,
   startupTimeoutMs: 30000,
-  requestTimeoutMs: 15000,
+  requestTimeoutMs: 60000,
   pairingToken: null
 });
 

@@ -6,7 +6,7 @@ import { CaptureController } from "../../dist/electron/main/capture-controller.j
 
 test("desktop build contains Electron main, preload, and renderer entry points", () => {
   assert.equal(existsSync(new URL("../../dist/electron/main/main.js", import.meta.url)), true);
-  assert.equal(existsSync(new URL("../../dist/electron/preload/preload.js", import.meta.url)), true);
+  assert.equal(existsSync(new URL("../../dist/electron/preload/preload.cjs", import.meta.url)), true);
   assert.equal(existsSync(new URL("../../dist/src/renderer/index.html", import.meta.url)), true);
 });
 

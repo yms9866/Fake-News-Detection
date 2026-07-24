@@ -72,14 +72,30 @@ export interface VerificationResponse {
   explanation: string;
   recommendation: string;
   evidence_summary: string[];
+  evidence_summary_items: Array<{
+    text: string;
+    source_ids: string[];
+  }>;
   evidence: Array<{
+    source_id: string;
+    source_number: number;
     url: string;
     title: string;
+    publisher: string;
+    domain: string;
     stance: string;
     source_type: string;
     reliability: Quality;
     fetched: boolean;
+    used_in_explanation: boolean;
+    citation_label: string;
   }>;
+  qualifying_source_count: number;
+  raw_assessment: {
+    verdict: string | null;
+    evidence_quality: Quality | null;
+    explanation: string;
+  } | null;
   web_context: string | null;
   error: string | null;
 }

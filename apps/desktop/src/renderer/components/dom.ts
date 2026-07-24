@@ -22,7 +22,11 @@ export function button(label, onClick, className = "button") {
 
 export function field(label, control) {
   const wrapper = div("field");
-  wrapper.append(el("label", label), control);
+  const labelNode = el("label", label);
+  const id = control.id || label.toLowerCase().replace(/[^a-z0-9]+/gu, "-");
+  control.id = id;
+  labelNode.setAttribute("for", id);
+  wrapper.append(labelNode, control);
   return wrapper;
 }
 

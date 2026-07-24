@@ -10,6 +10,28 @@ async function parseJsonSafe(response) {
   }
 }
 
+function statusFallbackCode(status) {
+  if (status === 400) {
+    return "WEB_HTTP_400";
+  }
+  if (status === 401 || status === 403) {
+    return "WEB_AUTHORIZATION_FAILED";
+  }
+  if (status === 404) {
+    return "WEB_NOT_FOUND";
+  }
+  if (status === 422) {
+    return "WEB_VALIDATION_ERROR";
+  }
+  if (status === 429) {
+    return "WEB_RATE_LIMITED";
+  }
+  if (status >= 500) {
+    return "WEB_SERVER_ERROR";
+  }
+  return "WEB_BACKEND_ERROR";
+}
+
 function withTimeout(timeoutMs) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -19,7 +41,7 @@ function withTimeout(timeoutMs) {
 export class WebApiClient {
   constructor(settings = {}) {
     this.backendOrigin = normalizeBackendOrigin(settings.backendOrigin);
-    this.timeoutMs = settings.requestTimeoutMs || 15000;
+    this.timeoutMs = settings.requestTimeoutMs || 60000;
     this.csrfToken = settings.csrfToken || null;
   }
 
@@ -124,8 +146,18 @@ export class WebApiClient {
     if (payload && typeof payload === "object") {
       payload.request_id = payload.request_id || response.headers.get("X-Request-ID");
       payload.trace_id = payload.trace_id || response.headers.get("X-Trace-ID");
+      return payload;
     }
-    return payload;
+    throw new WebClientError(
+      "WEB_MALFORMED_RESPONSE",
+      "The backend returned a response that was not valid JSON.",
+      response.status,
+      {
+        requestId: response.headers.get("X-Request-ID"),
+        traceId: response.headers.get("X-Trace-ID"),
+        backendOrigin: this.backendOrigin
+      }
+    );
   }
 
   async request(path, init = {}) {
@@ -142,21 +174,47 @@ export class WebApiClient {
       });
       if (!response.ok) {
         const payload = await parseJsonSafe(response);
+        const requestId = payload && payload.request_id ? payload.request_id : response.headers.get("X-Request-ID");
+        const traceId = payload && payload.trace_id ? payload.trace_id : response.headers.get("X-Trace-ID");
         throw new WebClientError(
-          payload && payload.error_code ? payload.error_code : "WEB_BACKEND_ERROR",
+          payload && payload.error_code ? payload.error_code : statusFallbackCode(response.status),
           payload && payload.message ? payload.message : "Backend request failed.",
-          response.status
+          response.status,
+          {
+            requestId,
+            traceId,
+            validationDetails: payload && Array.isArray(payload.details) ? payload.details : [],
+            backendOrigin: this.backendOrigin,
+            technicalDetails: payload ? JSON.stringify(payload) : ""
+          }
         );
       }
       return response;
     } catch (error) {
       if (error && error.name === "AbortError") {
-        throw new WebClientError("WEB_REQUEST_TIMEOUT", "The backend request timed out.");
+        throw new WebClientError(
+          "WEB_REQUEST_TIMEOUT",
+          `The local API did not respond before the timeout at ${this.backendOrigin}.`,
+          0,
+          { backendOrigin: this.backendOrigin }
+        );
       }
       if (error instanceof WebClientError) {
         throw error;
       }
-      throw new WebClientError("WEB_BACKEND_UNAVAILABLE", "Could not connect to the backend.");
+      const causeCode = error && error.cause && error.cause.code ? error.cause.code : "";
+      const refused = causeCode === "ECONNREFUSED";
+      throw new WebClientError(
+        refused ? "WEB_CONNECTION_REFUSED" : "WEB_CORS_OR_NETWORK_FAILURE",
+        refused
+          ? `The local API could not be reached at ${this.backendOrigin}.`
+          : `The browser could not complete the request to ${this.backendOrigin}. This may be a CORS or network failure.`,
+        0,
+        {
+          backendOrigin: this.backendOrigin,
+          technicalDetails: error && error.message ? error.message : String(error || "")
+        }
+      );
     } finally {
       timeout.done();
     }

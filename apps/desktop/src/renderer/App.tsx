@@ -1,5 +1,6 @@
 import { createDesktopApiClient } from "./api/client.js";
 import { captureDataUrlToBlob, makeCaptureUploadOptions } from "./capture/capture-model.js";
+import { el } from "./components/dom.js";
 import { summarizeHistoryItem } from "./components/safe-content.js";
 import { renderActiveJobScreen } from "./screens/active-job-screen.js";
 import { renderCaptureSourceScreen } from "./screens/capture-source-screen.js";
@@ -18,11 +19,66 @@ const DEFAULT_SETTINGS = {
   backendOrigin: "http://127.0.0.1:8000",
   defaultDeepCheck: false,
   defaultMaxLength: 512,
-  requestTimeoutMs: 15000,
+  requestTimeoutMs: 60000,
   startupTimeoutMs: 30000
 };
 
-export function renderDesktopApp(root, bridge = window.desktopApi) {
+export class DesktopInitializationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "DesktopInitializationError";
+    this.code = code;
+  }
+}
+
+export function resolveDesktopBridge(scope = globalThis) {
+  const bridge = scope && scope.desktopApi;
+  if (!bridge || typeof bridge !== "object") {
+    throw new DesktopInitializationError(
+      "DESKTOP_BRIDGE_MISSING",
+      "The secure Electron preload bridge was not initialized. Rebuild the desktop app and launch it through Electron."
+    );
+  }
+  const requiredGroups = ["backend", "capture", "settings", "history", "diagnostics", "external"];
+  for (const group of requiredGroups) {
+    if (!bridge[group] || typeof bridge[group] !== "object") {
+      throw new DesktopInitializationError(
+        "DESKTOP_BRIDGE_INCOMPLETE",
+        `The secure Electron preload bridge is missing the ${group} API.`
+      );
+    }
+  }
+  if (typeof bridge.backend.start !== "function" || typeof bridge.external.open !== "function") {
+    throw new DesktopInitializationError(
+      "DESKTOP_BRIDGE_INCOMPLETE",
+      "The secure Electron preload bridge does not match the renderer contract."
+    );
+  }
+  return bridge;
+}
+
+export function renderDesktopInitializationError(root, error) {
+  root.replaceChildren();
+  const panel = document.createElement("main");
+  panel.className = "init-error-shell";
+  const card = document.createElement("section");
+  card.className = "error-panel";
+  const title = document.createElement("h1");
+  title.textContent = "Desktop runtime could not start";
+  const message = document.createElement("p");
+  message.textContent = error && error.message ? error.message : "The desktop bridge is unavailable.";
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "Technical details";
+  const pre = document.createElement("pre");
+  pre.textContent = `${error && error.code ? error.code : "DESKTOP_INITIALIZATION_ERROR"}\n${message.textContent}`;
+  details.append(summary, pre);
+  card.append(title, message, details);
+  panel.append(card);
+  root.append(panel);
+}
+
+export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
   const settingsStore = createRendererSettingsStore(bridge);
   const historyStore = createRendererHistoryStore(bridge);
   const state = {
@@ -36,6 +92,7 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
     activeJob: null,
     liveSession: null,
     latestResult: null,
+    loading: false,
     error: null
   };
   const client = createDesktopApiClient(state.settings);
@@ -164,6 +221,16 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
         }
       });
     },
+    async openSource(url) {
+      await run(async () => {
+        const response = await bridge.external.open(url);
+        if (!response.ok) {
+          const err = new Error(response.error && response.error.message ? response.error.message : "Source link could not be opened.");
+          err.code = response.error && response.error.code ? response.error.code : "DESKTOP_SOURCE_OPEN_FAILED";
+          throw err;
+        }
+      });
+    },
     async saveSettings(settings) {
       await run(async () => {
         state.settings = { ...state.settings, ...(await settingsStore.save(settings)) };
@@ -188,13 +255,21 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
 
   async function run(operation) {
     state.error = null;
+    state.loading = true;
+    draw();
     try {
       await operation();
     } catch (error) {
       state.error = {
         code: error && error.code ? error.code : "DESKTOP_UI_ERROR",
-        message: error && error.message ? error.message : "Desktop operation failed."
+        message: error && error.message ? error.message : "Desktop operation failed.",
+        status: error && error.status ? error.status : 0,
+        requestId: error && error.requestId ? error.requestId : null,
+        traceId: error && error.traceId ? error.traceId : null,
+        validationDetails: error && Array.isArray(error.validationDetails) ? error.validationDetails : []
       };
+    } finally {
+      state.loading = false;
     }
     draw();
   }
@@ -257,10 +332,18 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
     );
     layout.append(nav);
     if (state.error) {
-      const alert = document.createElement("p");
-      alert.className = "alert";
-      alert.textContent = `${state.error.code}: ${state.error.message}`;
+      const alert = document.createElement("section");
+      alert.className = "alert error-panel";
+      alert.setAttribute("role", "alert");
+      alert.append(el("h2", errorTitle(state.error.code)));
+      alert.append(el("p", state.error.message));
+      const details = document.createElement("details");
+      details.append(el("summary", "Technical details"), el("pre", JSON.stringify(state.error, null, 2)));
+      alert.append(details);
       layout.append(alert);
+    }
+    if (state.loading) {
+      layout.append(renderLoadingPanel());
     }
     layout.append(renderCurrentScreen());
     root.append(layout);
@@ -296,4 +379,24 @@ export function renderDesktopApp(root, bridge = window.desktopApi) {
   draw();
   hydrate();
   return { state, actions, client };
+}
+
+function renderLoadingPanel() {
+  const panel = document.createElement("section");
+  panel.className = "status-panel loading-state";
+  panel.setAttribute("role", "status");
+  panel.setAttribute("aria-live", "polite");
+  panel.append(el("strong", "Working"));
+  panel.append(el("p", "The desktop app is waiting for the local runtime or API response.", "muted"));
+  return panel;
+}
+
+function errorTitle(code) {
+  if (code === "DESKTOP_BACKEND_UNAVAILABLE") {
+    return "Backend unavailable";
+  }
+  if (code === "DESKTOP_BACKEND_TIMEOUT") {
+    return "Backend request timed out";
+  }
+  return "Desktop operation failed";
 }

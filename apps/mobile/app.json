@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Fake News Detector",
+    "slug": "fake-news-detector",
+    "version": "0.8.0",
+    "orientation": "portrait",
+    "scheme": "fakenews",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "splash": {
+      "backgroundColor": "#f6f8f5",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.local.fakenewsdetector"
+    },
+    "android": {
+      "package": "com.local.fakenewsdetector",
+      "adaptiveIcon": {
+        "backgroundColor": "#f6f8f5"
+      }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "backendOrigin": "http://127.0.0.1:8000"
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, desktopCapturer, ipcMain, shell } from "electron";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BackendProcessManager } from "./backend-process-manager.js";
@@ -9,6 +10,8 @@ import { SecureSettingsStore } from "./secure-storage.js";
 import { ALLOWED_IPC_CHANNELS, validateIpcRequest } from "../../src/shared/runtime-validation.js";
 
 const dirname = fileURLToPath(new URL(".", import.meta.url));
+const PRELOAD_MISSING_CODE = "DESKTOP_PRELOAD_MISSING";
+let mainWindow = null;
 
 export function secureWebPreferences(preloadPath) {
   return {
@@ -19,9 +22,21 @@ export function secureWebPreferences(preloadPath) {
   };
 }
 
+export function resolvePreloadPath(baseDir = dirname) {
+  const preloadPath = join(baseDir, "../preload/preload.cjs");
+  if (!existsSync(preloadPath)) {
+    const error = new Error(
+      `Compiled Electron preload file is missing at ${preloadPath}. Run the desktop build before launching Electron.`
+    );
+    error.code = PRELOAD_MISSING_CODE;
+    throw error;
+  }
+  return preloadPath;
+}
+
 export function createMainWindow() {
-  const preloadPath = join(dirname, "../preload/preload.js");
-  const window = new BrowserWindow({
+  const preloadPath = resolvePreloadPath(dirname);
+  mainWindow = new BrowserWindow({
     width: 1180,
     height: 780,
     minWidth: 940,
@@ -29,8 +44,22 @@ export function createMainWindow() {
     title: "Fake News Desktop",
     webPreferences: secureWebPreferences(preloadPath)
   });
-  window.loadFile(join(dirname, "../../src/renderer/index.html"));
-  return window;
+  mainWindow.webContents.on("console-message", (_event, details) => {
+    console.log(`[desktop renderer:${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`);
+  });
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl) => {
+    console.error(`[desktop renderer] failed to load ${validatedUrl}: ${errorCode} ${errorDescription}`);
+  });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error(`[desktop renderer] process gone: ${details.reason}`);
+  });
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+  mainWindow.loadFile(join(dirname, "../../src/renderer/index.html"));
+  mainWindow.show();
+  mainWindow.focus();
+  return mainWindow;
 }
 
 export function registerIpcHandlers({ ipc = ipcMain, backendManager, captureController, settingsStore, historyStore }) {

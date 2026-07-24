@@ -1,11 +1,16 @@
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 export class WebClientError extends Error {
-  constructor(code, message, status = 0) {
+  constructor(code, message, status = 0, details = {}) {
     super(message);
     this.name = "WebClientError";
     this.code = code;
     this.status = status;
+    this.requestId = details.requestId || null;
+    this.traceId = details.traceId || null;
+    this.validationDetails = Array.isArray(details.validationDetails) ? details.validationDetails : [];
+    this.backendOrigin = details.backendOrigin || null;
+    this.technicalDetails = details.technicalDetails || "";
   }
 }
 
@@ -54,9 +59,16 @@ export function validateUrlPayload(payload) {
 }
 
 export function safeExternalUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw || /[\u0000-\u001f\u007f]/u.test(raw)) {
+    return null;
+  }
   try {
-    const parsed = new URL(String(value || ""));
+    const parsed = new URL(raw);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    if (!parsed.hostname || parsed.username || parsed.password) {
       return null;
     }
     return parsed.toString();

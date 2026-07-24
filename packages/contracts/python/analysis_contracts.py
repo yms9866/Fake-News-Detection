@@ -334,12 +334,33 @@ class LiveSessionEventResponse(BaseModel):
 class EvidenceSummaryItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    source_id: str = ""
+    source_number: int = Field(default=0, ge=0)
     url: str
     title: str = ""
+    publisher: str = ""
+    domain: str = ""
     stance: str = "UNKNOWN"
     source_type: str = "UNKNOWN"
     reliability: Quality = "LOW"
     fetched: bool = False
+    used_in_explanation: bool = False
+    citation_label: str = ""
+
+
+class EvidenceSummaryStatement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class RawEvidenceAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: str | None = None
+    evidence_quality: Quality | None = None
+    explanation: str = ""
 
 
 class VerificationResponse(BaseModel):
@@ -350,7 +371,10 @@ class VerificationResponse(BaseModel):
     explanation: str
     recommendation: str
     evidence_summary: list[str] = Field(default_factory=list)
+    evidence_summary_items: list[EvidenceSummaryStatement] = Field(default_factory=list)
     evidence: list[EvidenceSummaryItem] = Field(default_factory=list)
+    qualifying_source_count: int = 0
+    raw_assessment: RawEvidenceAssessment | None = None
     web_context: str | None = None
     error: str | None = None
 

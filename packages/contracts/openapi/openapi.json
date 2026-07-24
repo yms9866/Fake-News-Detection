@@ -1982,6 +1982,17 @@
       },
       "EvidenceSummaryItem": {
         "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "default": ""
+          },
+          "source_number": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Number",
+            "default": 0
+          },
           "url": {
             "type": "string",
             "title": "Url"
@@ -1989,6 +2000,16 @@
           "title": {
             "type": "string",
             "title": "Title",
+            "default": ""
+          },
+          "publisher": {
+            "type": "string",
+            "title": "Publisher",
+            "default": ""
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain",
             "default": ""
           },
           "stance": {
@@ -2015,6 +2036,16 @@
             "type": "boolean",
             "title": "Fetched",
             "default": false
+          },
+          "used_in_explanation": {
+            "type": "boolean",
+            "title": "Used In Explanation",
+            "default": false
+          },
+          "citation_label": {
+            "type": "string",
+            "title": "Citation Label",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -2023,6 +2054,27 @@
           "url"
         ],
         "title": "EvidenceSummaryItem"
+      },
+      "EvidenceSummaryStatement": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "EvidenceSummaryStatement"
       },
       "ExtractionMetadata": {
         "properties": {
@@ -3047,6 +3099,45 @@
         ],
         "title": "PendingAnalysisResponse"
       },
+      "RawEvidenceAssessment": {
+        "properties": {
+          "verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          },
+          "evidence_quality": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "HIGH",
+                  "MEDIUM",
+                  "LOW"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Quality"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RawEvidenceAssessment"
+      },
       "ReadinessResponse": {
         "properties": {
           "status": {
@@ -3235,12 +3326,34 @@
             "type": "array",
             "title": "Evidence Summary"
           },
+          "evidence_summary_items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceSummaryStatement"
+            },
+            "type": "array",
+            "title": "Evidence Summary Items"
+          },
           "evidence": {
             "items": {
               "$ref": "#/components/schemas/EvidenceSummaryItem"
             },
             "type": "array",
             "title": "Evidence"
+          },
+          "qualifying_source_count": {
+            "type": "integer",
+            "title": "Qualifying Source Count",
+            "default": 0
+          },
+          "raw_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RawEvidenceAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "web_context": {
             "anyOf": [

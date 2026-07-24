@@ -1,6 +1,11 @@
-import { renderDesktopApp } from "./App.js";
+import { renderDesktopApp, renderDesktopInitializationError } from "./App.js";
 
 const root = document.getElementById("root");
 if (root) {
-  renderDesktopApp(root);
+  try {
+    renderDesktopApp(root);
+  } catch (error) {
+    console.error(error);
+    renderDesktopInitializationError(root, error);
+  }
 }

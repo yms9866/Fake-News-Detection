@@ -6,7 +6,7 @@ export function renderSettingsScreen(appState, actions) {
   const origin = textInput(appState.settings.backendOrigin || "http://127.0.0.1:8000");
   const deepCheck = checkbox(appState.settings.defaultDeepCheck);
   const maxLength = numberInput(appState.settings.defaultMaxLength || 512);
-  const timeout = numberInput(appState.settings.requestTimeoutMs || 15000);
+  const timeout = numberInput(appState.settings.requestTimeoutMs || 60000);
   screen.append(
     field("Backend origin", origin),
     field("Default deep check", deepCheck),

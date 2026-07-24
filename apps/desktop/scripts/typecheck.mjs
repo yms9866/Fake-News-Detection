@@ -11,7 +11,7 @@ if (build.status !== 0) {
   process.exit(build.status || 1);
 }
 
-const files = globSync("dist/**/*.js", { cwd: root, nodir: true });
+const files = globSync("dist/**/*.{js,cjs}", { cwd: root, nodir: true });
 for (const file of files) {
   const check = spawnSync(process.execPath, ["--check", join(root, file)], {
     encoding: "utf8"

@@ -1,5 +1,49 @@
-import { contextBridge, ipcRenderer } from "electron";
-import { ALLOWED_IPC_CHANNELS, validateIpcRequest } from "../../src/shared/runtime-validation.js";
+const { contextBridge, ipcRenderer } = require("electron");
+
+const ALLOWED_IPC_CHANNELS = Object.freeze({
+  backendStatus: "desktop:backend:status",
+  backendStart: "desktop:backend:start",
+  backendStop: "desktop:backend:stop",
+  backendLogs: "desktop:backend:logs",
+  captureSources: "desktop:capture:sources",
+  captureOnce: "desktop:capture:once",
+  settingsGet: "desktop:settings:get",
+  settingsSave: "desktop:settings:save",
+  settingsClear: "desktop:settings:clear",
+  historyList: "desktop:history:list",
+  historySave: "desktop:history:save",
+  historyClear: "desktop:history:clear",
+  diagnosticsGet: "desktop:diagnostics:get",
+  externalOpen: "desktop:external:open"
+});
+
+const ALLOWED_CHANNEL_VALUES = new Set(Object.values(ALLOWED_IPC_CHANNELS));
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateIpcRequest(channel, payload = {}) {
+  if (!ALLOWED_CHANNEL_VALUES.has(channel)) {
+    const error = new Error("Renderer attempted to call an unsupported desktop channel.");
+    error.code = "DESKTOP_INVALID_IPC_CHANNEL";
+    throw error;
+  }
+
+  if (channel === ALLOWED_IPC_CHANNELS.captureSources) {
+    return {
+      sourceType: isPlainObject(payload) && payload.sourceType === "window" ? "window" : "screen"
+    };
+  }
+
+  if (channel === ALLOWED_IPC_CHANNELS.externalOpen) {
+    return {
+      url: isPlainObject(payload) ? String(payload.url || "") : String(payload || "")
+    };
+  }
+
+  return isPlainObject(payload) ? { ...payload } : {};
+}
 
 function invoke(channel, payload = {}) {
   const validated = validateIpcRequest(channel, payload);

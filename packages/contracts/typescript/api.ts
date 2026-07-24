@@ -66,12 +66,29 @@ export interface AnalyzeUrlRequest {
 }
 
 export interface EvidenceSummaryItem {
+  source_id: string;
+  source_number: number;
   url: string;
   title: string;
+  publisher: string;
+  domain: string;
   stance: string;
   source_type: string;
   reliability: Quality;
   fetched: boolean;
+  used_in_explanation: boolean;
+  citation_label: string;
+}
+
+export interface EvidenceSummaryStatement {
+  text: string;
+  source_ids: string[];
+}
+
+export interface RawEvidenceAssessment {
+  verdict: string | null;
+  evidence_quality: Quality | null;
+  explanation: string;
 }
 
 export interface MediaMetadata {
@@ -121,7 +138,10 @@ export interface VerificationResponse {
   explanation: string;
   recommendation: string;
   evidence_summary: string[];
+  evidence_summary_items: EvidenceSummaryStatement[];
   evidence: EvidenceSummaryItem[];
+  qualifying_source_count: number;
+  raw_assessment: RawEvidenceAssessment | null;
   web_context: string | null;
   error: string | null;
 }

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Sequence, cast
+from urllib.parse import urlparse
 
 from packages.backend.fnd.domain.media import (
     AnalysisJob,
@@ -11,7 +12,12 @@ from packages.backend.fnd.domain.media import (
     MediaAnalysisAccepted as DomainMediaAnalysisAccepted,
 )
 from packages.backend.fnd.domain.entities import AnalysisResult
-from packages.backend.fnd.domain.enums import StyleRiskSignal
+from packages.backend.fnd.domain.enums import (
+    EvidenceQuality,
+    EvidenceStance,
+    FinalVerdict,
+    StyleRiskSignal,
+)
 from packages.backend.fnd.domain.live import (
     LiveRegion as DomainLiveRegion,
     LiveSession as DomainLiveSession,
@@ -20,6 +26,7 @@ from packages.backend.fnd.domain.live import (
 from packages.contracts.python.analysis_contracts import (
     AnalysisResponse,
     EvidenceSummaryItem,
+    EvidenceSummaryStatement,
     ExtractionMetadata,
     ForensicPluginResultResponse,
     JobError,
@@ -30,6 +37,7 @@ from packages.contracts.python.analysis_contracts import (
     LiveSessionResponse,
     LiveVerificationSnapshotResponse,
     MediaAnalysisAccepted,
+    RawEvidenceAssessment,
     VerificationResponse,
 )
 
@@ -78,16 +86,26 @@ def _verification(result: AnalysisResult) -> VerificationResponse | None:
     if evidence is None:
         return None
 
+    indexed_items = list(enumerate(evidence.items, start=1))
+    qualifying_source_ids, qualifying_source_count = _qualifying_evidence_details(
+        indexed_items
+    )
     items = [
         EvidenceSummaryItem(
-            url=item.url,
+            source_id=f"source-{index}",
+            source_number=index,
+            url=_safe_evidence_url(item.url),
             title=item.title,
+            publisher=item.publisher,
+            domain=_domain_from_url(item.url),
             stance=item.stance.value,
             source_type=item.source_type.value,
             reliability=item.reliability.value,
             fetched=item.fetched,
+            used_in_explanation=f"source-{index}" in qualifying_source_ids,
+            citation_label=f"Source {index}",
         )
-        for item in evidence.items
+        for index, item in indexed_items
     ]
 
     web_context = (
@@ -95,17 +113,132 @@ def _verification(result: AnalysisResult) -> VerificationResponse | None:
         if result.search_context is not None
         else evidence.raw_context
     )
+    user_verdict, user_quality, explanation = _user_facing_verification(
+        result=result,
+        qualifying_source_count=qualifying_source_count,
+    )
+    summary_items = [
+        EvidenceSummaryStatement(
+            text=str(item),
+            source_ids=sorted(qualifying_source_ids),
+        )
+        for item in evidence.evidence_summary
+    ]
 
     return VerificationResponse(
-        verdict=evidence.verdict.value if evidence.verdict else None,
-        evidence_quality=evidence.evidence_quality.value,
-        explanation=evidence.explanation,
+        verdict=user_verdict.value if user_verdict else None,
+        evidence_quality=user_quality.value if user_quality else None,
+        explanation=explanation,
         recommendation=evidence.recommendation,
         evidence_summary=list(evidence.evidence_summary),
+        evidence_summary_items=summary_items,
         evidence=items,
+        qualifying_source_count=qualifying_source_count,
+        raw_assessment=(
+            RawEvidenceAssessment(
+                verdict=evidence.verdict.value if evidence.verdict else None,
+                evidence_quality=evidence.evidence_quality.value,
+                explanation=evidence.explanation,
+            )
+            if evidence.verdict is not None
+            else None
+        ),
         web_context=web_context,
         error=evidence.error,
     )
+
+
+def _safe_evidence_url(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw or any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        return ""
+    try:
+        parsed = urlparse(raw)
+    except ValueError:
+        return ""
+    if parsed.scheme not in {"http", "https"}:
+        return ""
+    if not parsed.hostname or parsed.username or parsed.password:
+        return ""
+    return raw
+
+
+def _domain_from_url(value: str) -> str:
+    safe_url = _safe_evidence_url(value)
+    if not safe_url:
+        return ""
+    parsed = urlparse(safe_url)
+    return parsed.hostname or ""
+
+
+def _is_qualifying_evidence(item: object) -> bool:
+    return bool(
+        getattr(item, "fetched", False)
+        and getattr(item, "reliability", EvidenceQuality.LOW) != EvidenceQuality.LOW
+        and not getattr(item, "is_original_claim", False)
+        and not getattr(item, "mentions_only", False)
+        and getattr(item, "matches_claim", False)
+        and not getattr(item, "outdated", False)
+        and getattr(item, "stance", EvidenceStance.UNKNOWN)
+        in {EvidenceStance.SUPPORTS, EvidenceStance.CONTRADICTS}
+    )
+
+
+def _qualifying_evidence_details(
+    indexed_items: Sequence[tuple[int, object]],
+) -> tuple[set[str], int]:
+    source_ids: set[str] = set()
+    groups: set[str] = set()
+    for index, item in indexed_items:
+        if not _is_qualifying_evidence(item):
+            continue
+        source_id = f"source-{index}"
+        source_ids.add(source_id)
+        groups.add(_independence_group(item))
+    return source_ids, len(groups)
+
+
+def _independence_group(item: object) -> str:
+    try:
+        group = getattr(item, "independence_group")
+    except Exception:
+        group = None
+    return str(
+        group
+        or getattr(item, "copied_from", None)
+        or getattr(item, "independence_key", None)
+        or getattr(item, "canonical_url", None)
+        or getattr(item, "publisher", None)
+        or getattr(item, "url", "")
+    )
+
+
+def _user_facing_verification(
+    *,
+    result: AnalysisResult,
+    qualifying_source_count: int,
+) -> tuple[FinalVerdict | None, EvidenceQuality | None, str]:
+    evidence = result.evidence
+    assert evidence is not None
+    final_verdict = result.final.verdict
+    if evidence.error or evidence.verdict == FinalVerdict.ERROR:
+        return FinalVerdict.UNVERIFIED, EvidenceQuality.LOW, evidence.explanation
+
+    if final_verdict in {FinalVerdict.REAL, FinalVerdict.FAKE}:
+        return final_verdict, result.final.confidence, evidence.explanation
+
+    if evidence.verdict in {FinalVerdict.REAL, FinalVerdict.FAKE}:
+        return (
+            FinalVerdict.UNVERIFIED,
+            EvidenceQuality.LOW,
+            (
+                "The provider's raw assessment was not accepted as verified evidence "
+                "by the deterministic policy. Qualified fetched sources were "
+                f"insufficient ({qualifying_source_count})."
+            ),
+        )
+
+    return evidence.verdict, evidence.evidence_quality, evidence.explanation
 
 
 def _forensic_results(result: AnalysisResult) -> list[ForensicPluginResultResponse]:

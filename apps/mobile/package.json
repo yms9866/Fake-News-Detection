@@ -3,18 +3,36 @@
   "version": "0.8.0",
   "private": true,
   "type": "module",
-  "description": "React Native-shaped mobile client adapters for fake-news analysis.",
+  "description": "Expo mobile client for fake-news analysis.",
+  "main": "index.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "start": "node scripts/dev.mjs",
+    "android": "node scripts/dev.mjs --android",
+    "emulator": "node scripts/dev.mjs --emulator",
+    "phone": "node scripts/dev.mjs --phone",
+    "tunnel": "node scripts/dev.mjs --phone --tunnel --online",
+    "backend": "node scripts/backend.mjs",
+    "ios": "node scripts/dev.mjs --ios",
+    "web": "node scripts/dev.mjs --web",
     "build": "node scripts/build.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "lint": "node scripts/lint.mjs",
     "test": "node scripts/build.mjs && node scripts/test.mjs tests/unit tests/integration",
     "test:e2e": "node scripts/build.mjs && node scripts/test.mjs tests/e2e"
   },
-  "optionalPeerDependencies": {
-    "react": ">=18.0.0",
-    "react-native": ">=0.74.0",
-    "expo": ">=51.0.0"
+  "dependencies": {
+    "@babel/runtime": "7.29.7",
+    "@react-native/assets-registry": "0.74.87",
+    "expo": "^51.0.0",
+    "expo-asset": "~10.0.10",
+    "expo-build-properties": "~0.12.5",
+    "react": "18.2.0",
+    "react-native": "0.74.5"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.45",
+    "babel-preset-expo": "11.0.15",
+    "typescript": "~5.3.3"
   }
 }

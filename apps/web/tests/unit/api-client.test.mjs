@@ -39,6 +39,19 @@ test("text analysis flow calls backend contract", async () => {
   assert.equal(JSON.parse(captured.init.body).text, "Claim");
 });
 
+test("default backend origin and liveness route are stable", async () => {
+  let capturedUrl;
+  await withFetch(async (url) => {
+    capturedUrl = String(url);
+    return response({ status: "live" });
+  }, async () => {
+    const client = new WebApiClient();
+    assert.equal(client.backendOrigin, "http://127.0.0.1:8000");
+    assert.equal((await client.live()).status, "live");
+  });
+  assert.equal(capturedUrl, "http://127.0.0.1:8000/v1/health/live");
+});
+
 test("URL analysis flow validates HTTP URLs", async () => {
   let body;
   await withFetch(async (_url, init) => {
@@ -53,6 +66,64 @@ test("URL analysis flow validates HTTP URLs", async () => {
 test("invalid URL is rejected before backend call", async () => {
   const client = new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" });
   assert.throws(() => client.analyzeUrl({ url: "javascript:alert(1)" }), WebClientError);
+});
+
+test("HTTP validation errors preserve backend details", async () => {
+  await withFetch(async () => response({
+    error_code: "VALIDATION_ERROR",
+    message: "Validation failed.",
+    request_id: "req-422",
+    trace_id: "trace-422",
+    details: [{ loc: ["body", "text"], msg: "String should have at least 1 character" }]
+  }, 422), async () => {
+    const client = new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" });
+    await assert.rejects(
+      () => client.analyzeText({ text: "claim" }),
+      (error) => {
+        assert.equal(error instanceof WebClientError, true);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.equal(error.status, 422);
+        assert.equal(error.requestId, "req-422");
+        assert.equal(error.traceId, "trace-422");
+        assert.equal(error.validationDetails[0].loc[1], "text");
+        return true;
+      }
+    );
+  });
+});
+
+test("connection refusal is not reported as an HTTP error", async () => {
+  await withFetch(async () => {
+    throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:8000"), {
+      cause: { code: "ECONNREFUSED" }
+    });
+  }, async () => {
+    const client = new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" });
+    await assert.rejects(
+      () => client.live(),
+      (error) => error instanceof WebClientError && error.code === "WEB_CONNECTION_REFUSED"
+    );
+  });
+});
+
+test("timeouts and malformed responses get stable error codes", async () => {
+  await withFetch(async () => {
+    const error = new Error("The operation was aborted.");
+    error.name = "AbortError";
+    throw error;
+  }, async () => {
+    await assert.rejects(
+      () => new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" }).live(),
+      (error) => error instanceof WebClientError && error.code === "WEB_REQUEST_TIMEOUT"
+    );
+  });
+
+  await withFetch(async () => response(null, 200), async () => {
+    await assert.rejects(
+      () => new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" }).live(),
+      (error) => error instanceof WebClientError && error.code === "WEB_MALFORMED_RESPONSE"
+    );
+  });
 });
 
 test("media upload supports image audio and video endpoints", async () => {

@@ -64,7 +64,7 @@ export function normalizeBackendOrigin(origin) {
   return parsed.toString().replace(/\/$/u, "");
 }
 
-export function validateTimeoutMs(value, fallback = 15000) {
+export function validateTimeoutMs(value, fallback = 60000) {
   const parsed = Number(value || fallback);
   if (!Number.isFinite(parsed)) {
     return fallback;
@@ -156,7 +156,7 @@ export function validateSettings(payload) {
     defaultDeepCheck: Boolean(value.defaultDeepCheck),
     defaultMaxLength: validateMaxLength(value.defaultMaxLength, 512),
     startupTimeoutMs: validateTimeoutMs(value.startupTimeoutMs, 30000),
-    requestTimeoutMs: validateTimeoutMs(value.requestTimeoutMs, 15000),
+    requestTimeoutMs: validateTimeoutMs(value.requestTimeoutMs, 60000),
     pairingToken: typeof value.pairingToken === "string" && value.pairingToken.trim()
       ? value.pairingToken.trim()
       : null
@@ -164,9 +164,16 @@ export function validateSettings(payload) {
 }
 
 export function validateExternalUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw || /[\u0000-\u001f\u007f]/u.test(raw)) {
+    throw new DesktopRuntimeError(
+      DESKTOP_ERROR_CODES.unsafeExternalUrl,
+      "External link contains unsafe characters."
+    );
+  }
   let parsed;
   try {
-    parsed = new URL(String(url || ""));
+    parsed = new URL(raw);
   } catch {
     throw new DesktopRuntimeError(DESKTOP_ERROR_CODES.unsafeExternalUrl, "External link is not a valid URL.");
   }
@@ -174,6 +181,12 @@ export function validateExternalUrl(url) {
     throw new DesktopRuntimeError(
       DESKTOP_ERROR_CODES.unsafeExternalUrl,
       "Only HTTP and HTTPS links can be opened."
+    );
+  }
+  if (!parsed.hostname || parsed.username || parsed.password) {
+    throw new DesktopRuntimeError(
+      DESKTOP_ERROR_CODES.unsafeExternalUrl,
+      "External link must include a host and must not include credentials."
     );
   }
   return parsed.toString();

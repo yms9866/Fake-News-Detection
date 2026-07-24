@@ -35,3 +35,9 @@ export interface DesktopBridge {
     open(url: string): Promise<DesktopBridgeResult<unknown>>;
   };
 }
+
+declare global {
+  interface Window {
+    desktopApi: DesktopBridge;
+  }
+}

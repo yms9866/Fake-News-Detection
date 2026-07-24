@@ -1,6 +1,8 @@
 import { createWebApiClient } from "./api/client.js";
-import { button, div, el, field, input, textarea } from "./components/dom.js";
-import { compactHistoryItem, evidenceLinkDescriptor, textOnly } from "./components/safe-rendering.js";
+import { button, checkbox, div, el, field, input, textarea } from "./components/dom.js";
+import { renderResultView } from "./components/result-view.js";
+import { compactHistoryItem } from "./components/safe-rendering.js";
+import { renderConnectionStatus, renderEmptyState, renderErrorPanel, renderLoadingState } from "./components/status-panels.js";
 import { requestCameraImage, requestDisplayCapture, requestMicrophone, stopStream } from "./capture/browser-capture.js";
 import { createDevAuthAdapter } from "./auth/dev-auth.js";
 import { createHistoryStore } from "./stores/history-store.js";
@@ -8,7 +10,9 @@ import { createCsrfToken } from "./security/csrf.js";
 
 const DEFAULT_SETTINGS = {
   backendOrigin: "http://127.0.0.1:8000",
-  requestTimeoutMs: 15000,
+  defaultDeepCheck: true,
+  defaultMaxLength: 512,
+  requestTimeoutMs: 60000,
   csrfToken: createCsrfToken("web-client")
 };
 
@@ -23,13 +27,29 @@ export function renderWebApp(root) {
     job: null,
     live: null,
     diagnostics: null,
+    connection: { status: "unknown", origin: DEFAULT_SETTINGS.backendOrigin },
+    loading: false,
     error: null,
+    lastRetry: null,
     history: []
   };
 
   const actions = {
     navigate(route) {
       state.route = route;
+      draw();
+    },
+    async checkConnection() {
+      state.connection = { status: "checking", origin: client.backendOrigin };
+      state.lastRetry = actions.checkConnection;
+      draw();
+      try {
+        await client.live();
+        state.connection = { status: "ready", origin: client.backendOrigin };
+      } catch (error) {
+        state.connection = { status: "unavailable", origin: client.backendOrigin };
+        state.error = normalizeUiError(error);
+      }
       draw();
     },
     async signIn() {
@@ -116,10 +136,18 @@ export function renderWebApp(root) {
 
   async function run(operation) {
     state.error = null;
+    state.loading = true;
+    state.lastRetry = () => run(operation);
+    draw();
     try {
       await operation();
     } catch (error) {
-      state.error = { code: error.code || "WEB_ERROR", message: error.message || "Web operation failed." };
+      state.error = normalizeUiError(error);
+      if (!state.error.status) {
+        state.connection = { status: "unavailable", origin: client.backendOrigin };
+      }
+    } finally {
+      state.loading = false;
     }
     draw();
   }
@@ -139,6 +167,7 @@ export function renderWebApp(root) {
   function draw() {
     root.replaceChildren();
     const layout = document.createElement("main");
+    layout.className = "app-shell";
     const navigation = document.createElement("nav");
     navigation.setAttribute("aria-label", "Primary");
     navigation.append(
@@ -155,10 +184,16 @@ export function renderWebApp(root) {
       nav("Diagnostics", "diagnostics")
     );
     layout.append(navigation);
+    const content = div("content-shell");
+    content.append(renderConnectionStatus(state.connection, actions.checkConnection));
     if (state.error) {
-      layout.append(el("p", `${state.error.code}: ${state.error.message}`, "alert"));
+      content.append(renderErrorPanel(state.error, state.lastRetry));
     }
-    layout.append(renderRoute());
+    if (state.loading) {
+      content.append(renderLoadingState("Analyzing"));
+    }
+    content.append(renderRoute());
+    layout.append(content);
     root.append(layout);
   }
 
@@ -191,14 +226,28 @@ export function renderWebApp(root) {
 
   function renderAnalyze() {
     const screen = div("screen");
-    screen.append(el("h1", "Analyze"));
+    screen.append(el("p", "Evidence-focused analysis", "eyebrow"));
+    screen.append(el("h1", "Check a claim, article, or source"));
+    screen.append(el("p", "The final verdict is based on deterministic evidence policy. Style analysis is shown separately and never proves truth by itself.", "lede"));
     const text = textarea("");
     const url = input("url", "");
-    screen.append(field("Text", text), field("URL", url));
+    const deepCheck = checkbox(DEFAULT_SETTINGS.defaultDeepCheck);
+    const maxLength = input("number", String(DEFAULT_SETTINGS.defaultMaxLength));
+    maxLength.min = "128";
+    maxLength.max = "8192";
+    maxLength.step = "1";
     screen.append(
-      button("Analyze text", () => actions.analyzeText({ text: text.value, deep_check: false, max_length: 512 })),
-      button("Analyze URL", () => actions.analyzeUrl({ url: url.value, deep_check: false, max_length: 512 }))
+      field("Text", text),
+      field("URL", url),
+      field("Deep check", deepCheck),
+      field("Max length", maxLength)
     );
+    const actionsRow = div("actions");
+    actionsRow.append(
+      button("Analyze text", () => actions.analyzeText({ text: text.value, deep_check: deepCheck.checked, max_length: Number(maxLength.value) || DEFAULT_SETTINGS.defaultMaxLength })),
+      button("Analyze URL", () => actions.analyzeUrl({ url: url.value, deep_check: deepCheck.checked, max_length: Number(maxLength.value) || DEFAULT_SETTINGS.defaultMaxLength }))
+    );
+    screen.append(actionsRow);
     return screen;
   }
 
@@ -239,25 +288,18 @@ export function renderWebApp(root) {
 
   function renderResult() {
     const screen = div("screen result");
-    screen.append(el("h1", "Result"));
-    if (!state.result) {
-      screen.append(el("p", "No result yet.", "muted"));
-      return screen;
-    }
-    screen.append(el("h2", textOnly(state.result.final_verdict, "UNVERIFIED")));
-    screen.append(el("p", textOnly(state.result.reason), "muted"));
-    const evidence = div("evidence");
-    for (const item of (state.result.verification && state.result.verification.evidence) || []) {
-      const descriptor = evidenceLinkDescriptor(item);
-      evidence.append(el("p", `${descriptor.title} ${descriptor.url || ""} ${descriptor.stance}/${descriptor.reliability}`));
-    }
-    screen.append(evidence);
+    screen.append(el("h1", "Analysis result"));
+    screen.append(renderResultView(state.result));
     return screen;
   }
 
   function renderHistory() {
     const screen = div("screen");
     screen.append(el("h1", "History"));
+    if (state.history.length === 0) {
+      screen.append(renderEmptyState("No history yet", "Completed analyses will appear here for quick review."));
+      return screen;
+    }
     for (const item of state.history) {
       screen.append(el("p", `${item.analysisId} ${item.finalVerdict}`));
     }
@@ -301,5 +343,19 @@ export function renderWebApp(root) {
   }
 
   draw();
+  actions.checkConnection();
   return { state, actions, client, auth };
+}
+
+function normalizeUiError(error) {
+  return {
+    code: error && error.code ? error.code : "WEB_ERROR",
+    message: error && error.message ? error.message : "Web operation failed.",
+    status: error && error.status ? error.status : 0,
+    requestId: error && error.requestId ? error.requestId : null,
+    traceId: error && error.traceId ? error.traceId : null,
+    validationDetails: error && Array.isArray(error.validationDetails) ? error.validationDetails : [],
+    backendOrigin: error && error.backendOrigin ? error.backendOrigin : DEFAULT_SETTINGS.backendOrigin,
+    technicalDetails: error && error.technicalDetails ? error.technicalDetails : ""
+  };
 }

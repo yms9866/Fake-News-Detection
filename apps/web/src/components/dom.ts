@@ -37,6 +37,13 @@ export function input(type = "text", value = "") {
   return node;
 }
 
+export function checkbox(checked = false) {
+  const node = document.createElement("input");
+  node.type = "checkbox";
+  node.checked = Boolean(checked);
+  return node;
+}
+
 export function textarea(value = "") {
   const node = document.createElement("textarea");
   node.value = value;

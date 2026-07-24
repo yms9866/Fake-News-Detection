@@ -21,7 +21,9 @@ function isTypeOnly(text) {
 for (const file of globSync("{electron,src}/**/*", { cwd: root, nodir: true })) {
   const extension = extname(file);
   const source = join(root, file);
-  const out = join(dist, file).replace(/\.(tsx|ts)$/u, ".js");
+  const normalizedFile = file.replace(/\\/gu, "/");
+  const compiledExtension = normalizedFile === "electron/preload/preload.ts" ? ".cjs" : ".js";
+  const out = join(dist, file).replace(/\.(tsx|ts)$/u, compiledExtension);
   if (extension === ".ts" || extension === ".tsx") {
     const text = await readFile(source, "utf8");
     if (isTypeOnly(text)) {

@@ -5,11 +5,13 @@ import {
   DesktopRuntimeError,
   normalizeBackendOrigin,
   validateCaptureRequest,
+  validateExternalUrl,
   validateIpcRequest,
   validateSettings,
   validateTextRequest,
   validateUrlRequest
 } from "../../dist/src/shared/runtime-validation.js";
+import { openExternalLink } from "../../dist/electron/main/external-links.js";
 
 test("known IPC channel validates", () => {
   const payload = validateIpcRequest(ALLOWED_IPC_CHANNELS.captureSources, { sourceType: "window" });
@@ -22,6 +24,26 @@ test("unknown IPC channel is rejected", () => {
 
 test("renderer cannot request arbitrary external protocols", () => {
   assert.throws(() => validateIpcRequest(ALLOWED_IPC_CHANNELS.externalOpen, { url: "file:///tmp/a" }), DesktopRuntimeError);
+});
+
+test("safe HTTP and HTTPS source URLs are accepted for external opening", () => {
+  assert.equal(validateExternalUrl("https://example.com/report"), "https://example.com/report");
+  assert.equal(validateExternalUrl("http://example.com/report"), "http://example.com/report");
+});
+
+test("credentialed and injected external URLs are rejected", () => {
+  assert.throws(() => validateExternalUrl("https://user:pass@example.com"), DesktopRuntimeError);
+  assert.throws(() => validateExternalUrl("https://example.com/a\nb"), DesktopRuntimeError);
+  assert.throws(() => validateExternalUrl("data:text/html,hi"), DesktopRuntimeError);
+});
+
+test("main-process external link helper validates before opening", () => {
+  const opened = [];
+  const shell = { openExternal: (url) => opened.push(url) };
+  const result = openExternalLink(shell, "https://example.com/source");
+  assert.equal(result.opened, true);
+  assert.deepEqual(opened, ["https://example.com/source"]);
+  assert.throws(() => openExternalLink(shell, "chrome://settings"), DesktopRuntimeError);
 });
 
 test("loopback backend origin is normalized", () => {

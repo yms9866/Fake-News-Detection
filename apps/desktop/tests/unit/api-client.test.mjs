@@ -116,6 +116,38 @@ test("provider failures do not expose stack traces through client errors", async
   });
 });
 
+test("desktop HTTP validation errors preserve backend details", async () => {
+  await withFetch(async () => response({
+    error_code: "VALIDATION_ERROR",
+    message: "Validation failed.",
+    request_id: "req-422",
+    trace_id: "trace-422",
+    details: [{ loc: ["body", "url"], msg: "URL is invalid" }]
+  }, 422), async () => {
+    await assert.rejects(
+      () => new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" }).models(),
+      (error) => {
+        assert.equal(error instanceof DesktopApiError, true);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.equal(error.status, 422);
+        assert.equal(error.requestId, "req-422");
+        assert.equal(error.traceId, "trace-422");
+        assert.equal(error.validationDetails[0].loc[1], "url");
+        return true;
+      }
+    );
+  });
+});
+
+test("desktop malformed responses get a stable error", async () => {
+  await withFetch(async () => response(null), async () => {
+    await assert.rejects(
+      () => new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" }).live(),
+      (error) => error instanceof DesktopApiError && error.code === "DESKTOP_MALFORMED_RESPONSE"
+    );
+  });
+});
+
 test("live OCR session methods use versioned live endpoints", async () => {
   const calls = [];
   await withFetch(async (url, init = {}) => {

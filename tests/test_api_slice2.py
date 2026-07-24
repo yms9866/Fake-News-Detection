@@ -19,6 +19,7 @@ from packages.backend.fnd.domain.entities import (
     AnalysisResult,
     AnalyzeContentCommand,
     EvidenceAnalysis,
+    EvidenceItem,
     ExtractedDocument,
     SearchContext,
     StyleAnalysis,
@@ -26,8 +27,10 @@ from packages.backend.fnd.domain.entities import (
 )
 from packages.backend.fnd.domain.enums import (
     EvidenceQuality,
+    EvidenceStance,
     FinalVerdict,
     InputType,
+    SourceType,
     StyleRiskSignal,
 )
 
@@ -346,6 +349,129 @@ class ApiSlice2Tests(unittest.TestCase):
                 allowed_origins=["*"],
             )
 
+    def test_cors_preflight_accepts_configured_origin(self) -> None:
+        response = self.client.options(
+            "/v1/analyses/text",
+            headers={
+                "Origin": "http://127.0.0.1:5173",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Authorization,Content-Type,X-CSRF-Token",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            "http://127.0.0.1:5173",
+        )
+        self.assertIn("POST", response.headers["access-control-allow-methods"])
+        self.assertIn(
+            "Authorization",
+            response.headers["access-control-allow-headers"],
+        )
+        self.assertIn(
+            "X-CSRF-Token",
+            response.headers["access-control-allow-headers"],
+        )
+
+    def test_cors_rejects_unconfigured_origin(self) -> None:
+        response = self.client.get(
+            "/v1/health/live",
+            headers={"Origin": "https://unconfigured.example"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("access-control-allow-origin", response.headers)
+
+    def test_structured_evidence_keeps_policy_verdict_authoritative(self) -> None:
+        self.workflow.next_result = self._analysis_with_evidence(
+            items=(
+                EvidenceItem(
+                    url="https://news.example/article",
+                    title="Mentions the topic",
+                    publisher="Example News",
+                    source_type=SourceType.REPUTABLE_NEWS,
+                    stance=EvidenceStance.MENTIONS,
+                    reliability=EvidenceQuality.LOW,
+                    fetched=False,
+                    mentions_only=True,
+                ),
+                EvidenceItem(
+                    url="javascript:alert(1)",
+                    title="Unsafe source",
+                    source_type=SourceType.UNKNOWN,
+                    stance=EvidenceStance.MENTIONS,
+                    reliability=EvidenceQuality.LOW,
+                    fetched=False,
+                    mentions_only=True,
+                ),
+            ),
+            provider_verdict=FinalVerdict.REAL,
+            provider_quality=EvidenceQuality.HIGH,
+            final_verdict=FinalVerdict.UNVERIFIED,
+            final_quality=EvidenceQuality.LOW,
+        )
+
+        response = self.client.post(
+            "/v1/analyses/text",
+            json={"text": "Evidence serializer regression claim.", "deep_check": True},
+        )
+
+        body = response.json()
+        verification = body["verification"]
+        self.assertEqual(body["final_verdict"], "UNVERIFIED")
+        self.assertEqual(verification["verdict"], "UNVERIFIED")
+        self.assertEqual(verification["evidence_quality"], "LOW")
+        self.assertEqual(verification["qualifying_source_count"], 0)
+        self.assertEqual(verification["raw_assessment"]["verdict"], "REAL")
+        self.assertEqual(verification["evidence"][0]["source_id"], "source-1")
+        self.assertEqual(verification["evidence"][0]["source_number"], 1)
+        self.assertEqual(verification["evidence"][0]["domain"], "news.example")
+        self.assertEqual(verification["evidence"][0]["stance"], "MENTIONS")
+        self.assertFalse(verification["evidence"][0]["fetched"])
+        self.assertFalse(verification["evidence"][0]["used_in_explanation"])
+        self.assertEqual(verification["evidence"][1]["url"], "")
+
+    def test_duplicate_qualifying_sources_count_once(self) -> None:
+        self.workflow.next_result = self._analysis_with_evidence(
+            items=(
+                EvidenceItem(
+                    url="https://first.example/article",
+                    title="First copy",
+                    publisher="Wire Copy",
+                    independence_key="wire-copy",
+                    source_type=SourceType.REPUTABLE_NEWS,
+                    stance=EvidenceStance.SUPPORTS,
+                    reliability=EvidenceQuality.MEDIUM,
+                    fetched=True,
+                ),
+                EvidenceItem(
+                    url="https://second.example/article",
+                    title="Second copy",
+                    publisher="Wire Copy",
+                    independence_key="wire-copy",
+                    source_type=SourceType.REPUTABLE_NEWS,
+                    stance=EvidenceStance.SUPPORTS,
+                    reliability=EvidenceQuality.MEDIUM,
+                    fetched=True,
+                ),
+            ),
+            provider_verdict=FinalVerdict.REAL,
+            provider_quality=EvidenceQuality.HIGH,
+            final_verdict=FinalVerdict.UNVERIFIED,
+            final_quality=EvidenceQuality.LOW,
+        )
+
+        response = self.client.post(
+            "/v1/analyses/text",
+            json={"text": "Duplicate evidence grouping regression claim."},
+        )
+
+        verification = response.json()["verification"]
+        self.assertEqual(verification["qualifying_source_count"], 1)
+        self.assertTrue(verification["evidence"][0]["used_in_explanation"])
+        self.assertTrue(verification["evidence"][1]["used_in_explanation"])
+
     def test_openapi_response_schemas_match_shared_contracts(self) -> None:
         schema = self.app.openapi()
         schemas = schema["components"]["schemas"]
@@ -357,6 +483,15 @@ class ApiSlice2Tests(unittest.TestCase):
         self.assertIn("style_word_count", properties)
         self.assertIn("style_minimum_word_count", properties)
         self.assertIn("style_warning", properties)
+        verification = schemas["VerificationResponse"]["properties"]
+        self.assertIn("evidence_summary_items", verification)
+        self.assertIn("qualifying_source_count", verification)
+        self.assertIn("raw_assessment", verification)
+        evidence = schemas["EvidenceSummaryItem"]["properties"]
+        self.assertIn("source_id", evidence)
+        self.assertIn("source_number", evidence)
+        self.assertIn("domain", evidence)
+        self.assertIn("used_in_explanation", evidence)
         text_response = schema["paths"]["/v1/analyses/text"]["post"]["responses"]["200"]
         ref = text_response["content"]["application/json"]["schema"]["$ref"]
         self.assertEqual(ref, "#/components/schemas/AnalysisResponse")
@@ -370,6 +505,9 @@ class ApiSlice2Tests(unittest.TestCase):
             "style_word_count",
             "style_minimum_word_count",
             "style_warning",
+            "source_id",
+            "qualifying_source_count",
+            "raw_assessment",
             'InputTypeCode = "text" | "url" | "file" | "unknown"',
         ]:
             self.assertIn(field_name, text)
@@ -500,6 +638,49 @@ class ApiSlice2Tests(unittest.TestCase):
         joined_logs = "\n".join(captured.output)
         self.assertIn("analysis_timing", joined_logs)
         self.assertNotIn(sensitive_text, joined_logs)
+
+    def _analysis_with_evidence(
+        self,
+        *,
+        items: tuple[EvidenceItem, ...],
+        provider_verdict: FinalVerdict,
+        provider_quality: EvidenceQuality,
+        final_verdict: FinalVerdict,
+        final_quality: EvidenceQuality,
+    ) -> AnalysisResult:
+        text = "Evidence serializer regression claim with enough words for a stable style result."
+        evidence = EvidenceAnalysis(
+            provider_name="fake",
+            verdict=provider_verdict,
+            evidence_quality=provider_quality,
+            explanation="Raw provider explanation.",
+            evidence_summary=("Provider summary.",),
+            recommendation="Review qualified fetched sources.",
+            items=items,
+            raw_context="raw web context",
+        )
+        return AnalysisResult(
+            document=ExtractedDocument(
+                input_type=InputType.DIRECT_TEXT,
+                text=text,
+                source=None,
+            ),
+            style=StyleAnalysis.from_prediction(
+                signal=StyleRiskSignal.LOW,
+                confidence=0.91,
+                text=text,
+                model_name="fake-model",
+            ),
+            evidence=evidence,
+            search_context=SearchContext(
+                query="claim query", raw_context="search context"
+            ),
+            final=VerdictDecision(
+                verdict=final_verdict,
+                confidence=final_quality,
+                reason="Deterministic policy decision.",
+            ),
+        )
 
 
 if __name__ == "__main__":
