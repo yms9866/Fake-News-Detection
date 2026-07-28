@@ -1,0 +1,8 @@
+.expo
+.expo/
+.expo/*
+.expo-export*
+.expo-export*/
+.expo-export*/**
+android/
+ios/

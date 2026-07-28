@@ -248,17 +248,25 @@ if ((phoneMode || (hasAndroidTarget(forwardedArgs) && forwardedArgs.includes("--
 }
 
 if (phoneMode && lanIp) {
-  env.EXPO_PUBLIC_BACKEND_ORIGIN = process.env.MOBILE_BACKEND_ORIGIN || process.env.EXPO_PUBLIC_BACKEND_ORIGIN || `http://${lanIp}:8000`;
+  env.EXPO_PUBLIC_API_URL = process.env.MOBILE_API_URL
+    || process.env.EXPO_PUBLIC_API_URL
+    || process.env.MOBILE_BACKEND_ORIGIN
+    || process.env.EXPO_PUBLIC_BACKEND_ORIGIN
+    || `http://${lanIp}:8000`;
   console.log(`Phone mode: using LAN IP ${lanIp}`);
-  console.log(`Phone mode: backend origin ${env.EXPO_PUBLIC_BACKEND_ORIGIN}`);
+  console.log(`Phone mode: API URL ${env.EXPO_PUBLIC_API_URL}`);
   if (!lanIp) {
     console.warn("Could not detect a LAN IP. Set MOBILE_LAN_IP before starting phone mode.");
   }
 }
 
 if (hasAndroidTarget(forwardedArgs) && !phoneMode) {
-  env.EXPO_PUBLIC_BACKEND_ORIGIN = process.env.MOBILE_BACKEND_ORIGIN || process.env.EXPO_PUBLIC_BACKEND_ORIGIN || "http://10.0.2.2:8000";
-  console.log("Android emulator mode: using backend http://10.0.2.2:8000");
+  env.EXPO_PUBLIC_API_URL = process.env.MOBILE_API_URL
+    || process.env.EXPO_PUBLIC_API_URL
+    || process.env.MOBILE_BACKEND_ORIGIN
+    || process.env.EXPO_PUBLIC_BACKEND_ORIGIN
+    || "http://10.0.2.2:8000";
+  console.log(`Android emulator mode: using API ${env.EXPO_PUBLIC_API_URL}`);
   if (forwardedArgs.includes("--localhost") && canUseAdb) {
     console.log("Android emulator mode: Expo localhost routing enabled via adb.");
   }

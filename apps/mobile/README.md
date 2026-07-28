@@ -1,66 +1,137 @@
 # Mobile App
 
-This package is a real Expo entry point for the fake-news analysis API.
+This package is the real Expo/React Native client for the fake-news analysis API. The mobile app renders input forms, calls the backend API, and displays results. It does not contain provider, model, extraction, or verdict policy logic.
 
-## Run
+## Setup
 
 From the repository root:
 
 ```powershell
 pnpm install
+pnpm --filter mobile expo:check
+pnpm --filter mobile doctor
+```
+
+On this Windows workspace, native Android builds can hit CMake path-length failures when pnpm uses the default deep virtual store. Use the same short-store install before native builds:
+
+```powershell
+pnpm install --force --config.virtual-store-dir=C:\v --config.peers-suffix-max-length=4 --config.confirmModulesPurge=false
+```
+
+Use Android Studio's bundled JDK if `JAVA_HOME` points at a missing JDK:
+
+```powershell
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+```
+
+## Backend URL
+
+The app reads `EXPO_PUBLIC_API_URL`. See `apps/mobile/.env.example` for safe local values.
+
+- Android emulator: `http://10.0.2.2:8000`
+- Physical Android over USB with `adb reverse`: `http://127.0.0.1:8000`
+- Physical Android on the same Wi-Fi: `http://<your-pc-lan-ip>:8000`
+- Production: use HTTPS
+
+Do not put provider keys such as Gemini or search credentials in `EXPO_PUBLIC_*` variables. Expo public variables are bundled into the client.
+
+## Run The API
+
+```powershell
 pnpm --filter mobile backend
+```
+
+That helper starts FastAPI on `0.0.0.0:8000` so a physical phone on the same network can reach it. For emulator-only testing, a backend already running on `127.0.0.1:8000` is enough because Android maps the host through `10.0.2.2`.
+
+## Run In Expo
+
+Emulator:
+
+```powershell
 pnpm --filter mobile emulator
 ```
 
-Use `pnpm --filter mobile android` or `pnpm --filter mobile emulator` for an Android emulator. The launcher adds Expo localhost routing and uses `http://10.0.2.2:8000` for the API backend.
-
-Use `pnpm --filter mobile phone` for a physical phone on the same Wi-Fi. The launcher uses your LAN IP for Metro and sets `EXPO_PUBLIC_BACKEND_ORIGIN` to `http://<LAN_IP>:8000`.
-
-If the wrong LAN IP is chosen, set it explicitly:
+Physical phone on the same Wi-Fi:
 
 ```powershell
-$env:MOBILE_LAN_IP="172.23.1.41"
 pnpm --filter mobile phone
 ```
 
-If same-Wi-Fi LAN mode cannot reach your phone, use tunnel mode:
+If the wrong LAN IP is selected:
+
+```powershell
+$env:MOBILE_LAN_IP="192.168.1.25"
+pnpm --filter mobile phone
+```
+
+Tunnel mode is available when LAN routing is blocked:
 
 ```powershell
 pnpm --filter mobile tunnel
 ```
 
-The dev launcher defaults to Expo offline mode only when no host mode is selected. Host modes such as emulator, phone, LAN, localhost, and tunnel use Expo's normal online checks.
+## Native Android Build
 
-The launcher sets the app's default backend URL for the target: Android emulators use `http://10.0.2.2:8000`, and physical devices use your computer's LAN URL. For physical phones, start the API with `pnpm --filter mobile backend`, which binds to `0.0.0.0`, and allow port `8000` through Windows Firewall.
+For a real APK that does not depend on Metro:
+
+```powershell
+cd apps/mobile
+node node_modules/expo/bin/cli prebuild --platform android --no-install
+cd android
+$env:EXPO_PUBLIC_API_URL="http://10.0.2.2:8000"
+$env:NODE_ENV="production"
+.\gradlew.bat app:assembleRelease -x lint -x test --configure-on-demand --build-cache -PreactNativeArchitectures=x86_64 --console=plain
+```
+
+Install and launch on an emulator:
+
+```powershell
+adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+adb shell monkey -p com.local.fakenewsdetector 1
+```
+
+For USB-connected physical Android devices, enable USB debugging and confirm the device appears in:
+
+```powershell
+adb devices
+adb reverse tcp:8000 tcp:8000
+adb reverse tcp:8081 tcp:8081
+```
+
+Then use `EXPO_PUBLIC_API_URL=http://127.0.0.1:8000`.
+
+## Checks
+
+```powershell
+pnpm --filter mobile typecheck
+pnpm --filter mobile lint
+pnpm --filter mobile test
+pnpm --filter mobile test:static
+pnpm --filter mobile test:e2e
+pnpm --filter mobile build
+```
+
+`test:e2e` performs a real Expo Android export. `build` exports the Android bundle to `.expo-export/android`.
 
 ## Troubleshooting
 
-### Emulator cannot load the app
+`Cannot find module 'babel-preset-expo'`
 
-1. Start the Android emulator before running `pnpm --filter mobile emulator`.
-2. Make sure the API is running: `pnpm --filter mobile backend`.
-3. If Metro says port `8081` is busy, the launcher now picks the next free port automatically.
-4. If Expo cannot find `adb`, install Android platform-tools or set `ANDROID_HOME`. The launcher adds the default SDK path when it exists.
+Run `pnpm install`. The mobile package now declares `babel-preset-expo` and `expo-asset` directly for SDK 57.
 
-### Phone cannot connect
+`Expo Go says something went wrong`
 
-1. Start the phone-friendly backend: `pnpm --filter mobile backend`.
-2. Confirm your PC and phone are on the same Wi-Fi.
-3. Set the correct LAN IP if auto-detection is wrong:
+Check the Metro terminal first. SDK 57 projects require Expo Go/dev clients that support SDK 57. When in doubt, use the native release APK flow above.
 
-```powershell
-$env:MOBILE_LAN_IP="172.23.1.41"
-pnpm --filter mobile phone
-```
+`ninja: manifest 'build.ninja' still dirty after 100 tries`
 
-4. Allow Windows Firewall access for Python/Node on ports `8000` and `8081`.
-5. If LAN mode still fails, use tunnel mode: `pnpm --filter mobile tunnel`.
+This is the Windows pnpm/CMake path-length failure seen in this workspace. Reinstall with the short virtual store command in the setup section, then rebuild.
 
-### Backend check fails inside the app
+`Unable to load script`
 
-Open the app, confirm the Backend URL, and tap **Check Backend**.
+For debug builds, Metro must be reachable on port `8081`. Use `adb reverse tcp:8081 tcp:8081` for USB/emulator localhost routing, or use the release APK flow to avoid Metro entirely.
 
-- Emulator default: `http://10.0.2.2:8000`
-- Phone default: `http://<your-lan-ip>:8000`
+Backend check fails in the app
 
-If the app loads but backend checks fail, the API is usually still bound to `127.0.0.1`. Restart it with `pnpm --filter mobile backend`.
+Open the app, confirm the Backend URL, and tap **Check Backend**. If a physical phone cannot reach the backend, allow Windows Firewall access for Python/Node on port `8000` and verify the API is bound to a LAN-reachable address.

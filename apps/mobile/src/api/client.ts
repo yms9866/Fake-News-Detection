@@ -1,15 +1,42 @@
+import { normalizeApiUrl, resolveApiUrl } from "../config/api";
+
+export const MOBILE_API_CLIENT_ERROR_CODES = {
+  BACKEND_ERROR: "MOBILE_BACKEND_ERROR",
+  NETWORK_UNREACHABLE: "MOBILE_NETWORK_UNREACHABLE",
+  REQUEST_TIMEOUT: "MOBILE_REQUEST_TIMEOUT"
+};
+
+const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_ANALYSIS_TIMEOUT_MS = 120000;
+
 export class MobileApiError extends Error {
-  constructor(code, message) {
-    super(message);
+  constructor(code, message, options = {}) {
+    const authToken = options["authToken"] || "";
+    const redacted = authToken ? String(message).split(authToken).join("[redacted]") : String(message);
+    super(redacted);
     this.name = "MobileApiError";
-    this.code = code;
+    this["code"] = code;
+    this["status"] = options["status"] || null;
+    this["details"] = options["details"] || null;
   }
 }
 
 export class MobileApiClient {
   constructor(settings = {}) {
-    this.backendOrigin = settings.backendOrigin || "http://127.0.0.1:8000";
-    this.timeoutMs = settings.timeoutMs || 15000;
+    const configuredUrl = settings["apiUrl"] || settings["backendOrigin"];
+    this["apiUrl"] = normalizeApiUrl(configuredUrl || resolveApiUrl({
+      env: settings["env"],
+      platform: settings["platform"]
+    }));
+    this["backendOrigin"] = this["apiUrl"];
+    this["timeoutMs"] = Number(settings["timeoutMs"] || DEFAULT_TIMEOUT_MS);
+    this["analysisTimeoutMs"] = Number(settings["analysisTimeoutMs"] || DEFAULT_ANALYSIS_TIMEOUT_MS);
+    this["fetchImpl"] = settings["fetchImpl"] || fetch;
+    this["authToken"] = settings["authToken"] || "";
+  }
+
+  getHealth() {
+    return this.requestJson("/v1/health/live", { method: "GET" });
   }
 
   analyzeText(payload) {
@@ -21,7 +48,7 @@ export class MobileApiClient {
         max_length: payload.max_length || 512
       }),
       headers: { "Content-Type": "application/json" }
-    });
+    }, { timeoutMs: this["analysisTimeoutMs"] });
   }
 
   analyzeUrl(payload) {
@@ -33,15 +60,19 @@ export class MobileApiClient {
         max_length: payload.max_length || 512
       }),
       headers: { "Content-Type": "application/json" }
-    });
+    }, { timeoutMs: this["analysisTimeoutMs"] });
   }
 
   uploadMedia(mediaType, file, options = {}) {
     const form = new FormData();
     form.append("file", file, file.name || `mobile-${mediaType}`);
-    form.append("deep_check", String(Boolean(options.deepCheck)));
-    form.append("max_length", String(options.maxLength || 512));
-    return this.requestJson(`/v1/analyses/${mediaType}`, { method: "POST", body: form });
+    form.append("deep_check", String(Boolean(options["deepCheck"])));
+    form.append("max_length", String(options["maxLength"] || 512));
+    return this.requestJson(
+      `/v1/analyses/${mediaType}`,
+      { method: "POST", body: form },
+      { timeoutMs: this["analysisTimeoutMs"] }
+    );
   }
 
   getJob(jobId) {
@@ -56,17 +87,71 @@ export class MobileApiClient {
     return this.requestJson(`/v1/analyses/${encodeURIComponent(analysisId)}`, { method: "GET" });
   }
 
-  async requestJson(path, init) {
-    const response = await fetch(`${this.backendOrigin}${path}`, init);
-    let payload = null;
+  async requestJson(path, init, options = {}) {
+    const controller = new AbortController();
+    const timeoutMs = Number(options["timeoutMs"] || this["timeoutMs"]);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const headers = {
+      ...(init && init.headers ? init.headers : {})
+    };
+    if (this["authToken"]) {
+      headers.Authorization = `Bearer ${this["authToken"]}`;
+    }
+
     try {
-      payload = await response.json();
-    } catch {
-      payload = null;
+      const response = await this["fetchImpl"](`${this["apiUrl"]}${path}`, {
+        ...(init || {}),
+        headers,
+        signal: controller.signal
+      });
+      const payload = await readPayload(response);
+      if (!response.ok) {
+        throw new MobileApiError(
+          payload && payload.error_code ? payload.error_code : MOBILE_API_CLIENT_ERROR_CODES.BACKEND_ERROR,
+          backendMessage(payload, `Backend request failed with HTTP ${response.status}.`),
+          { authToken: this["authToken"], details: payload, status: response.status }
+        );
+      }
+      return payload;
+    } catch (caught) {
+      if (caught instanceof MobileApiError) {
+        throw caught;
+      }
+      if (caught && caught["name"] === "AbortError") {
+        throw new MobileApiError(
+          MOBILE_API_CLIENT_ERROR_CODES.REQUEST_TIMEOUT,
+          `Backend request timed out after ${timeoutMs}ms.`,
+          { authToken: this["authToken"] }
+        );
+      }
+      throw new MobileApiError(
+        MOBILE_API_CLIENT_ERROR_CODES.NETWORK_UNREACHABLE,
+        caught instanceof Error ? caught.message : "Backend is unreachable.",
+        { authToken: this["authToken"] }
+      );
+    } finally {
+      clearTimeout(timeout);
     }
-    if (!response.ok) {
-      throw new MobileApiError(payload && payload.error_code ? payload.error_code : "MOBILE_BACKEND_ERROR", payload && payload.message ? payload.message : "Backend request failed.");
-    }
-    return payload;
   }
+}
+
+async function readPayload(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function backendMessage(payload, fallback) {
+  if (payload && payload.error_code && payload.message) {
+    return `${payload.error_code}: ${payload.message}`;
+  }
+  if (payload && payload.message) {
+    return payload.message;
+  }
+  if (payload && payload.detail) {
+    return typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail);
+  }
+  return fallback;
 }

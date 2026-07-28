@@ -1,5 +1,58 @@
 # Autonomous Execution Report
 
+## Mobile Runtime Correctness Patch
+
+Date: 2026-07-24
+
+Baseline:
+
+- Branch: `fix/mobile-runtime`
+- Starting commit: `d3f0388 Expand application functionality across clients and backend`
+- Scope: mobile runtime only; backend, web, desktop, and extension behavior were not restructured.
+
+Implemented:
+
+- Upgraded the mobile app from the placeholder/incomplete Expo setup to Expo SDK 57 dependencies aligned with React Native 0.86 and React 19.
+- Added explicit mobile API URL configuration through `EXPO_PUBLIC_API_URL` with emulator, USB, LAN, and production-safe documented values.
+- Added a shared mobile config module and API client error model with stable mobile error codes, timeout handling, token redaction, and structured backend error handling.
+- Kept quick health checks at a short timeout while allowing model-backed analysis/upload requests to run longer.
+- Removed tracked `.expo` generated state and ignored Expo/native build artifacts.
+- Replaced the fake static mobile E2E with a real Expo Android export validation script.
+- Updated Metro workspace resolution for pnpm without the obsolete symlink flag.
+- Documented real emulator, physical-device, native APK, and Windows pnpm/CMake path-length workflows.
+
+Runtime validation:
+
+- Android emulator `emulator-5554` was detected through ADB.
+- FastAPI liveness responded from the host at `http://127.0.0.1:8000/v1/health/live`.
+- A release APK was built with Gradle and installed on the emulator.
+- The installed app rendered the real `Mobile Analysis` screen.
+- The in-app backend check returned `Backend: live`.
+- A text analysis submitted through the emulator UI completed and rendered `UNVERIFIED`, `LOW`, a style signal, explanation text, and a request ID.
+
+Verification:
+
+- `pnpm --filter mobile typecheck`: passed.
+- `pnpm --filter mobile lint`: passed.
+- `pnpm --filter mobile test`: 36 tests passed.
+- `pnpm --filter mobile test:static`: 8 tests passed.
+- `pnpm --filter mobile test:e2e`: real Expo Android export passed.
+- `pnpm --filter mobile build`: real Expo Android export passed.
+- `pnpm --filter mobile expo:check`: passed.
+- `pnpm --filter mobile run doctor`: 19/20 checks passed; the remaining warning is caused by `.expo` files still being tracked in Git's index until their deletion is staged/committed.
+- `node node_modules/expo/bin/cli prebuild --platform android --no-install`: passed.
+- `.\gradlew.bat app:assembleRelease ...`: passed after using the short pnpm virtual store at `C:\v`.
+- `adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk`: passed.
+
+Remaining risks:
+
+- No physical Android phone was connected or authorized; `adb devices` only listed `emulator-5554`.
+- iOS/Xcode validation was not available on this Windows machine.
+- The generated native `apps/mobile/android` folder is ignored and was used only for local validation.
+- `expo run:android` may invoke pnpm install internally; on this Windows path it can require the same short virtual store settings used for Gradle validation.
+- Expo Doctor will keep reporting `.expo` as tracked in the dirty worktree until the tracked `.expo` deletions are staged or committed.
+- Release signing, EAS credentials, push notification credentials, and production HTTPS backend deployment are still not configured.
+
 ## Slice 5 - Electron Desktop Application
 
 Date: 2026-07-22

@@ -11,6 +11,8 @@ import {
   TextInput,
   View
 } from "react-native";
+import { MobileApiClient, MobileApiError } from "./api/client";
+import { normalizeApiUrl, resolveApiUrl } from "./config/api";
 
 export const MOBILE_SCREENS = [
   "TextAnalysis",
@@ -33,10 +35,7 @@ export const MOBILE_SCREENS = [
   "OfflineQueue"
 ];
 
-const CONFIGURED_BACKEND_ORIGIN = typeof process !== "undefined" && process.env
-  ? process.env.EXPO_PUBLIC_BACKEND_ORIGIN
-  : "";
-const DEFAULT_BACKEND_ORIGIN = CONFIGURED_BACKEND_ORIGIN || (Platform.OS === "android" ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000");
+const DEFAULT_API_URL = resolveApiUrl({ platform: Platform.OS });
 const h = React.createElement;
 
 export function createMobileAppShell() {
@@ -49,28 +48,11 @@ export function createMobileAppShell() {
 }
 
 function cleanOrigin(origin) {
-  return String(origin || DEFAULT_BACKEND_ORIGIN).trim().replace(/\/+$/u, "");
-}
-
-async function readPayload(response) {
   try {
-    return await response.json();
+    return normalizeApiUrl(origin || DEFAULT_API_URL);
   } catch {
-    return null;
+    return DEFAULT_API_URL;
   }
-}
-
-function backendMessage(payload, fallback) {
-  if (payload && payload.error_code && payload.message) {
-    return `${payload.error_code}: ${payload.message}`;
-  }
-  if (payload && payload.message) {
-    return payload.message;
-  }
-  if (payload && payload.detail) {
-    return typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail);
-  }
-  return fallback;
 }
 
 function valueOrDash(value) {
@@ -153,7 +135,7 @@ function ResultPanel({ result }) {
 }
 
 export default function App() {
-  const [backendOrigin, setBackendOrigin] = useState(DEFAULT_BACKEND_ORIGIN);
+  const [backendOrigin, setBackendOrigin] = useState(DEFAULT_API_URL);
   const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
@@ -162,24 +144,20 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState("Not checked");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
 
   const activeInput = mode === "text" ? text : url;
   const origin = useMemo(() => cleanOrigin(backendOrigin), [backendOrigin]);
 
   async function checkBackend() {
     setBackendStatus("Checking");
-    setError(null);
+    setError("");
     try {
-      const response = await fetch(`${origin}/v1/health/live`);
-      const payload = await readPayload(response);
-      if (!response.ok) {
-        setBackendStatus(backendMessage(payload, `HTTP ${response.status}`));
-        return;
-      }
+      const client = new MobileApiClient({ apiUrl: origin });
+      const payload = await client.getHealth();
       setBackendStatus(payload && payload.status ? payload.status : "Live");
     } catch (caught) {
-      setBackendStatus(caught instanceof Error ? caught.message : "Backend unavailable");
+      setBackendStatus(caught instanceof MobileApiError || caught instanceof Error ? caught.message : "Backend unavailable");
     }
   }
 
@@ -191,24 +169,18 @@ export default function App() {
     }
 
     setLoading(true);
-    setError(null);
+    setError("");
     setResult(null);
 
-    const path = mode === "text" ? "/v1/analyses/text" : "/v1/analyses/url";
     const body = mode === "text"
       ? { text: trimmed, deep_check: deepCheck, max_length: Number(maxLength) || 512 }
       : { url: trimmed, deep_check: deepCheck, max_length: Number(maxLength) || 512 };
 
     try {
-      const response = await fetch(`${origin}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const payload = await readPayload(response);
-      if (!response.ok) {
-        throw new Error(backendMessage(payload, `Backend request failed with HTTP ${response.status}.`));
-      }
+      const client = new MobileApiClient({ apiUrl: origin });
+      const payload = mode === "text"
+        ? await client.analyzeText(body)
+        : await client.analyzeUrl(body);
       setResult(payload);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Backend request failed.");

@@ -6,33 +6,42 @@
   "description": "Expo mobile client for fake-news analysis.",
   "main": "index.js",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "start": "node scripts/dev.mjs",
-    "android": "node scripts/dev.mjs --android",
+    "dev": "expo start",
+    "start": "expo start",
+    "start:clear": "expo start --clear",
+    "android": "expo run:android",
+    "android:device": "expo run:android --device",
     "emulator": "node scripts/dev.mjs --emulator",
     "phone": "node scripts/dev.mjs --phone",
     "tunnel": "node scripts/dev.mjs --phone --tunnel --online",
     "backend": "node scripts/backend.mjs",
-    "ios": "node scripts/dev.mjs --ios",
-    "web": "node scripts/dev.mjs --web",
-    "build": "node scripts/build.mjs",
-    "typecheck": "node scripts/typecheck.mjs",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build": "expo export --platform android --output-dir .expo-export/android",
+    "bundle:android": "expo export --platform android --output-dir .expo-export/android",
+    "compile:static": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint.mjs",
     "test": "node scripts/build.mjs && node scripts/test.mjs tests/unit tests/integration",
-    "test:e2e": "node scripts/build.mjs && node scripts/test.mjs tests/e2e"
+    "test:static": "node scripts/build.mjs && node scripts/test.mjs tests/static",
+    "test:e2e": "node scripts/validate-metro-bundle.mjs",
+    "doctor": "expo-doctor",
+    "expo:check": "expo install --check"
   },
   "dependencies": {
     "@babel/runtime": "7.29.7",
     "@react-native/assets-registry": "0.74.87",
-    "expo": "^51.0.0",
-    "expo-asset": "~10.0.10",
-    "expo-build-properties": "~0.12.5",
-    "react": "18.2.0",
-    "react-native": "0.74.5"
+    "expo": "^57.0.8",
+    "expo-asset": "~57.0.7",
+    "expo-build-properties": "~57.0.7",
+    "expo-system-ui": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.0"
   },
   "devDependencies": {
-    "@types/react": "~18.2.45",
-    "babel-preset-expo": "11.0.15",
-    "typescript": "~5.3.3"
+    "@types/react": "~19.2.17",
+    "babel-preset-expo": "57.0.4",
+    "expo-doctor": "1.20.1",
+    "typescript": "~6.0.3"
   }
 }

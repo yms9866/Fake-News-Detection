@@ -2,7 +2,7 @@ export class PermissionError extends Error {
   constructor(code, message) {
     super(message);
     this.name = "PermissionError";
-    this.code = code;
+    this["code"] = code;
   }
 }
 

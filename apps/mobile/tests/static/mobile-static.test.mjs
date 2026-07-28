@@ -36,24 +36,29 @@ test("mobile dev starts Expo instead of the adapter placeholder", async () => {
   assert.equal(devScript.includes("--localhost"), true);
   assert.equal(devScript.includes("MOBILE_LAN_IP"), true);
   assert.equal(devScript.includes("REACT_NATIVE_PACKAGER_HOSTNAME"), true);
-  assert.equal(devScript.includes("EXPO_PUBLIC_BACKEND_ORIGIN"), true);
+  assert.equal(devScript.includes("EXPO_PUBLIC_API_URL"), true);
   assert.equal(devScript.includes("resolveAndroidPlatformTools"), true);
   assert.equal(devScript.includes("resolveMetroPort"), true);
-  assert.equal(packageJson.scripts.android, "node scripts/dev.mjs --android");
+  assert.equal(packageJson.scripts.dev, "expo start");
+  assert.equal(packageJson.scripts.android, "expo run:android");
+  assert.equal(packageJson.scripts["android:device"], "expo run:android --device");
   assert.equal(packageJson.scripts.emulator, "node scripts/dev.mjs --emulator");
   assert.equal(packageJson.scripts.phone, "node scripts/dev.mjs --phone");
   assert.equal(packageJson.scripts.backend, "node scripts/backend.mjs");
   assert.equal(packageJson.scripts.tunnel, "node scripts/dev.mjs --phone --tunnel --online");
+  assert.equal(packageJson.scripts.build, "expo export --platform android --output-dir .expo-export/android");
+  assert.equal(packageJson.scripts["compile:static"], "node scripts/build.mjs");
+  assert.equal(packageJson.scripts["test:e2e"], "node scripts/validate-metro-bundle.mjs");
   assert.equal(packageJson.dependencies["@babel/runtime"], "7.29.7");
   assert.equal(packageJson.dependencies["@react-native/assets-registry"], "0.74.87");
-  assert.equal(packageJson.dependencies.expo.startsWith("^51."), true);
-  assert.equal(packageJson.dependencies["expo-asset"], "~10.0.10");
-  assert.equal(packageJson.dependencies["expo-build-properties"], "~0.12.5");
-  assert.equal(packageJson.dependencies.react, "18.2.0");
-  assert.equal(packageJson.dependencies["react-native"], "0.74.5");
-  assert.equal(packageJson.devDependencies["@types/react"], "~18.2.45");
-  assert.equal(packageJson.devDependencies["babel-preset-expo"], "11.0.15");
-  assert.equal(packageJson.devDependencies.typescript, "~5.3.3");
+  assert.equal(packageJson.dependencies.expo.startsWith("^57."), true);
+  assert.equal(packageJson.dependencies["expo-asset"], "~57.0.7");
+  assert.equal(packageJson.dependencies["expo-build-properties"], "~57.0.7");
+  assert.equal(packageJson.dependencies.react, "19.2.3");
+  assert.equal(packageJson.dependencies["react-native"], "0.86.0");
+  assert.equal(packageJson.devDependencies["@types/react"], "~19.2.17");
+  assert.equal(packageJson.devDependencies["babel-preset-expo"], "57.0.4");
+  assert.equal(packageJson.devDependencies.typescript, "~6.0.3");
 });
 
 test("mobile source does not implement verdict policy", async () => {
@@ -62,10 +67,12 @@ test("mobile source does not implement verdict policy", async () => {
   assert.equal(/final_verdict\s*=\s*["']FAKE/u.test(result), false);
 });
 
-test("mobile app accepts an Expo public backend origin", async () => {
+test("mobile app accepts an Expo public API URL", async () => {
   const app = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
-  assert.equal(app.includes("EXPO_PUBLIC_BACKEND_ORIGIN"), true);
-  assert.equal(app.includes("10.0.2.2:8000"), true);
+  const config = await readFile(new URL("../../src/config/api.ts", import.meta.url), "utf8");
+  assert.equal(config.includes("EXPO_PUBLIC_API_URL"), true);
+  assert.equal(config.includes("10.0.2.2:8000"), true);
+  assert.equal(app.includes("MobileApiClient"), true);
 });
 
 test("mobile app config allows local HTTP backend on Android", async () => {
@@ -80,5 +87,5 @@ test("Metro is configured for pnpm workspace resolution", async () => {
   assert.equal(metroConfig.includes("expo/metro-config"), true);
   assert.equal(metroConfig.includes("watchFolders"), true);
   assert.equal(metroConfig.includes("nodeModulesPaths"), true);
-  assert.equal(metroConfig.includes("unstable_enableSymlinks"), true);
+  assert.equal(metroConfig.includes("unstable_enableSymlinks"), false);
 });

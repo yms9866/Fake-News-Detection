@@ -13,6 +13,20 @@ function isTypeOnly(text) {
   return /^\s*(export\s+)?(type|interface)\s/mu.test(text);
 }
 
+function toRunnableJavaScript(text) {
+  return text
+    .replace(/(from\s+["'])(\.{1,2}\/[^"']+)(["'])/gu, (match, prefix, specifier, suffix) => {
+      return /\.[cm]?[jt]sx?$/u.test(specifier) || /\.json$/u.test(specifier)
+        ? `${prefix}${specifier.replace(/\.(ts|tsx)$/u, ".js")}${suffix}`
+        : `${prefix}${specifier}.js${suffix}`;
+    })
+    .replace(/(import\s*\(\s*["'])(\.{1,2}\/[^"']+)(["']\s*\))/gu, (match, prefix, specifier, suffix) => {
+      return /\.[cm]?[jt]sx?$/u.test(specifier) || /\.json$/u.test(specifier)
+        ? `${prefix}${specifier.replace(/\.(ts|tsx)$/u, ".js")}${suffix}`
+        : `${prefix}${specifier}.js${suffix}`;
+    });
+}
+
 for (const file of globSync("src/**/*", { cwd: root, nodir: true })) {
   const source = join(root, file);
   if ((await stat(source)).isDirectory()) {
@@ -27,7 +41,7 @@ for (const file of globSync("src/**/*", { cwd: root, nodir: true })) {
     if (isTypeOnly(text)) {
       continue;
     }
-    await writeFile(output, text, "utf8");
+    await writeFile(output, toRunnableJavaScript(text), "utf8");
   } else if (extension === ".json") {
     await writeFile(join(dist, rel), text, "utf8");
   }

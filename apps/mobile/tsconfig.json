@@ -4,6 +4,7 @@
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "strict": true,
+    "noImplicitAny": false,
     "jsx": "react-jsx",
     "allowJs": false,
     "isolatedModules": true,
