@@ -107,6 +107,27 @@ test("job cancellation calls the cancellation endpoint", async () => {
   assert.match(capturedUrl, /\/v1\/jobs\/j1\/cancel$/u);
 });
 
+test("desktop auth signs in and attaches bearer token", async () => {
+  const calls = [];
+  await withFetch(async (url, init = {}) => {
+    calls.push({ path: new URL(String(url)).pathname, headers: init.headers });
+    if (String(url).endsWith("/v1/auth/sign-in")) {
+      return response({
+        authenticated: true,
+        access_token: "desktop-token",
+        user: { user_id: "desktop-reviewer" }
+      });
+    }
+    return response({ status: "ready" });
+  }, async () => {
+    const client = new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" });
+    await client.signIn({ username: "desktop-reviewer" });
+    await client.ready();
+  });
+  assert.equal(calls[0].path, "/v1/auth/sign-in");
+  assert.equal(calls[1].headers.get("Authorization"), "Bearer desktop-token");
+});
+
 test("provider failures do not expose stack traces through client errors", async () => {
   await withFetch(async () => response({ error_code: "PROVIDER_FAILED", message: "Provider failed safely." }, 500), async () => {
     await assert.rejects(

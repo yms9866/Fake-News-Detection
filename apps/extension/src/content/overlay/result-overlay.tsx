@@ -14,15 +14,25 @@ export function summaryFromAnalysis(result, job = null) {
     clientState: result.status === "completed" ? "completed" : "processing",
     backendJobStatus: job ? job.status : undefined,
     styleSignal: result.style_signal,
+    styleText: result.style_assessment ? result.style_assessment.display_text : "",
+    styleConfidence: result.style_assessment ? result.style_assessment.display_confidence : "",
+    claimCount: Array.isArray(result.claims) ? result.claims.length : 0,
+    qualifyingSourceCount: result.search_summary
+      ? result.search_summary.qualifying_source_count
+      : result.verification
+        ? result.verification.qualifying_source_count
+        : 0,
     styleScopeReliable: result.style_scope_reliable,
     finalVerdict: result.final_verdict,
     confidence: result.confidence,
     verificationStatus,
-    sourceCount: result.verification ? result.verification.evidence.length : 0,
+    sourceCount: Array.isArray(result.sources)
+      ? result.sources.length
+      : result.verification
+        ? result.verification.evidence.length
+        : 0,
     warnings: result.warnings || [],
-    reason: result.reason,
-    requestId: result.request_id,
-    traceId: result.trace_id
+    reason: result.reason
   };
 }
 
@@ -47,11 +57,13 @@ export function renderResultOverlay(shadowRoot, summary) {
   title.textContent = "Analysis result";
   wrapper.append(title, close);
   wrapper.append(
-    metric("Writing-style risk", summary.styleSignal || "UNKNOWN"),
-    metric("Style scope", summary.styleScopeReliable ? "Reliable" : "Limited"),
-    metric("Evidence verification", humanVerification(summary.verificationStatus)),
+    metric("Writing style", summary.styleConfidence || "N/A"),
+    metric("Style assessment", summary.styleText || fallbackStyleText(summary.styleSignal)),
+    metric("Claims checked", String(summary.claimCount || 0)),
+    metric("Gemini evidence analysis", humanVerification(summary.verificationStatus)),
     metric("Final decision", `${summary.finalVerdict || "UNVERIFIED"} (${summary.confidence || "LOW"})`),
-    metric("Sources", String(summary.sourceCount || 0))
+    metric("Reviewed sources", String(summary.sourceCount || 0)),
+    metric("Qualifying sources", String(summary.qualifyingSourceCount || 0))
   );
   if (summary.warnings && summary.warnings.length) {
     const warning = document.createElement("p");
@@ -92,6 +104,16 @@ function metric(label, value) {
   return row;
 }
 
+function fallbackStyleText(signal) {
+  if (signal === "LOW_STYLE_RISK") {
+    return "The writing style seems similar to real or legitimate news reporting.";
+  }
+  if (signal === "HIGH_STYLE_RISK") {
+    return "The writing style seems similar to fake, misleading, or fabricated content.";
+  }
+  return "The writing-style assessment is unavailable.";
+}
+
 function humanVerification(value) {
   if (value === "completed") {
     return "Completed";
@@ -104,4 +126,3 @@ function humanVerification(value) {
   }
   return "Not run";
 }
-

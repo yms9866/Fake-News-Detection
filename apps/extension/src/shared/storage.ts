@@ -12,6 +12,7 @@ const memorySession = new Map();
 export const DEFAULT_SETTINGS = {
   backendOrigin: DEFAULT_BACKEND_ORIGIN,
   pairingToken: "",
+  authToken: "",
   defaultDeepCheck: false,
   defaultMaxLength: DEFAULT_MAX_LENGTH,
   requestTimeoutMs: DEFAULT_TIMEOUT_MS,
@@ -99,6 +100,7 @@ export function normalizeSettings(raw) {
     ...merged,
     backendOrigin: normalizeBackendOrigin(merged.backendOrigin),
     pairingToken: String(merged.pairingToken || "").trim(),
+    authToken: String(merged.authToken || "").trim(),
     defaultDeepCheck: Boolean(merged.defaultDeepCheck),
     defaultMaxLength: Math.min(8192, Math.max(128, Number(merged.defaultMaxLength) || DEFAULT_MAX_LENGTH)),
     requestTimeoutMs: Math.min(120000, Math.max(1000, Number(merged.requestTimeoutMs) || DEFAULT_TIMEOUT_MS)),
@@ -143,4 +145,3 @@ export async function clearExtensionState() {
 }
 
 export const memoryStorageForTests = { memoryLocal, memorySession };
-

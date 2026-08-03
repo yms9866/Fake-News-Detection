@@ -32,6 +32,25 @@ export function renderOptions(root) {
     draw();
   }
 
+  async function signIn() {
+    const username = root.querySelector("input[name='reviewerName']");
+    const response = await chrome.runtime.sendMessage(
+      makeMessage(MESSAGE_TYPES.signIn, {
+        username: username && username.value ? username.value : "extension-reviewer"
+      })
+    );
+    state.message = response.ok ? "Signed in." : "";
+    state.error = response.ok ? "" : response.error.message;
+    await load();
+  }
+
+  async function signOut() {
+    const response = await chrome.runtime.sendMessage(makeMessage(MESSAGE_TYPES.signOut));
+    state.message = response.ok ? "Signed out." : "";
+    state.error = response.ok ? "" : response.error.message;
+    await load();
+  }
+
   async function testConnection() {
     const response = await chrome.runtime.sendMessage(makeMessage(MESSAGE_TYPES.testConnection));
     state.message = response.ok ? "Backend connection works." : "";
@@ -46,6 +65,7 @@ export function renderOptions(root) {
     form.append(
       field("Backend origin", "backendOrigin", state.settings.backendOrigin),
       field("Optional pairing token", "pairingToken", state.settings.pairingToken || "", "password"),
+      field("Reviewer name", "reviewerName", "extension-reviewer"),
       field("Maximum length", "defaultMaxLength", String(state.settings.defaultMaxLength), "number"),
       field("Request timeout ms", "requestTimeoutMs", String(state.settings.requestTimeoutMs), "number"),
       checkbox("Style analysis + factual verification", "defaultDeepCheck", state.settings.defaultDeepCheck),
@@ -62,7 +82,12 @@ export function renderOptions(root) {
     form.append(saveButton);
     root.append(form);
     const actions = div("actions");
-    actions.append(button("Test connection", testConnection), button("Clear stored state", clearState));
+    actions.append(
+      button("Sign in", signIn),
+      button("Sign out", signOut),
+      button("Test connection", testConnection),
+      button("Clear stored state", clearState)
+    );
     root.append(actions);
     root.append(el("p", "Local mode accepts only localhost or loopback backend origins.", "muted"));
     if (state.message) {
@@ -80,6 +105,9 @@ export function renderOptions(root) {
 function readForm(root) {
   const data = {};
   for (const input of root.querySelectorAll("input")) {
+    if (input.name === "reviewerName") {
+      continue;
+    }
     if (input.type === "checkbox") {
       data[input.name] = input.checked;
     } else if (input.type === "number") {
@@ -136,4 +164,3 @@ function el(tag, text, className = "") {
   }
   return node;
 }
-

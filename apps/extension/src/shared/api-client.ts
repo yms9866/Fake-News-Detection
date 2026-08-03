@@ -45,6 +45,46 @@ export class ApiClient {
     return await this.getJson("/v1/models", { retry: true });
   }
 
+  async signIn(payload = {}) {
+    const response = await this.requestJson("/v1/auth/sign-in", {
+      method: "POST",
+      body: JSON.stringify({
+        username: String(payload.username || "extension-reviewer").trim() || "extension-reviewer",
+        tenant_id: String(payload.tenant_id || "local").trim() || "local",
+        client_type: "extension"
+      }),
+      headers: { "Content-Type": "application/json" }
+    });
+    if (response && response.access_token) {
+      this.credentials.authToken = response.access_token;
+    }
+    return response;
+  }
+
+  async restoreSession() {
+    return await this.getJson("/v1/auth/session", { retry: true });
+  }
+
+  async refreshSession() {
+    const response = await this.requestJson("/v1/auth/refresh", {
+      method: "POST"
+    });
+    if (response && response.access_token) {
+      this.credentials.authToken = response.access_token;
+    }
+    return response;
+  }
+
+  async signOut() {
+    try {
+      return await this.requestJson("/v1/auth/sign-out", {
+        method: "POST"
+      });
+    } finally {
+      this.credentials.authToken = "";
+    }
+  }
+
   async analyzeText(payload) {
     return await this.requestJson("/v1/analyses/text", {
       method: "POST",
@@ -143,6 +183,9 @@ export class ApiClient {
     const headers = new Headers(init.headers || {});
     if (this.credentials.pairingToken) {
       headers.set(PAIRING_HEADER, this.credentials.pairingToken);
+    }
+    if (this.credentials.authToken) {
+      headers.set("Authorization", `Bearer ${this.credentials.authToken}`);
     }
     try {
       const url = `${this.credentials.backendOrigin}${path}`;

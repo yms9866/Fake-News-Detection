@@ -1,4 +1,4 @@
-import { button, div, el } from "./dom.js";
+import { div, el } from "./dom.js";
 import { evidenceLinkDescriptor, textOnly } from "./safe-rendering.js";
 
 export function renderResultView(result) {
@@ -15,11 +15,12 @@ export function renderResultView(result) {
   summary.append(el("p", textOnly(result.reason, "No reason returned."), "reason"));
   wrapper.append(summary);
 
-  wrapper.append(renderVerification(result.verification));
-  wrapper.append(renderEvidenceSources(result.verification));
   wrapper.append(renderStyleSignal(result));
+  wrapper.append(renderClaims(result.claims));
+  wrapper.append(renderSearchSummary(result.search_summary));
+  wrapper.append(renderEvidenceSources(result));
+  wrapper.append(renderGeminiEvidence(result.gemini_evidence || result.verification));
   wrapper.append(renderWarnings(result.warnings));
-  wrapper.append(renderTechnicalDetails(result));
   return wrapper;
 }
 
@@ -30,32 +31,90 @@ function renderEmptyResult() {
   return empty;
 }
 
-function renderVerification(verification) {
+function renderGeminiEvidence(verification) {
   const section = div("panel verification-panel");
-  section.append(el("h3", "Evidence verification"));
+  section.append(el("h3", "Gemini evidence analysis"));
   if (!verification) {
     section.append(el("p", "Evidence verification was not performed for this analysis.", "muted"));
     return section;
   }
-  section.append(el("p", `${textOnly(verification.verdict, "UNVERIFIED")} - ${textOnly(verification.evidence_quality, "LOW")} evidence`));
+  const assessment = verification.assessment || verification.verdict || "UNVERIFIED";
+  const confidence = verification.confidence || "LOW";
+  const quality = verification.evidence_quality || "LOW";
+  section.append(el("p", `${textOnly(assessment, "UNVERIFIED")} - ${textOnly(confidence, "LOW")} confidence`));
+  section.append(el("p", `Evidence quality: ${textOnly(quality, "LOW")}`, "muted"));
   section.append(el("p", textOnly(verification.explanation, "No explanation returned."), "muted"));
-  section.append(el("p", `Qualified sources: ${Number(verification.qualifying_source_count || 0)}`, "muted"));
-  if (verification.raw_assessment && verification.raw_assessment.verdict && verification.raw_assessment.verdict !== verification.verdict) {
-    section.append(el("p", `Raw provider assessment: ${verification.raw_assessment.verdict}. The deterministic policy remains authoritative.`, "technical-note"));
+  if (verification.grounding_used !== undefined) {
+    section.append(el("p", verification.grounding_used ? "Grounded in reviewed source passages." : "No reviewed source grounding was available.", "muted"));
+  }
+  section.append(el("p", "The final system verdict is decided separately by deterministic evidence policy.", "muted"));
+  if (verification.error_message) {
+    section.append(el("p", textOnly(verification.error_message), "muted"));
   }
   return section;
 }
 
-function renderEvidenceSources(verification) {
+function renderClaims(claims = []) {
+  const section = div("panel claims-panel");
+  section.append(el("h3", "Claims checked"));
+  if (!Array.isArray(claims) || claims.length === 0) {
+    section.append(el("p", "No atomic factual claims were checked for this analysis.", "muted"));
+    return section;
+  }
+  const list = div("claim-list");
+  for (const claim of claims) {
+    const card = div("claim-card");
+    card.append(el("p", `Claim ${Number(claim.sequence || 0) || ""}`, "eyebrow"));
+    card.append(el("h4", textOnly(claim.claim_text, "Untitled claim")));
+    card.append(badgeList([
+      textOnly(claim.verification_status, "INSUFFICIENT_EVIDENCE"),
+      `${textOnly(claim.confidence, "LOW")} confidence`,
+      textOnly(claim.importance, "MEDIUM")
+    ]));
+    card.append(el("p", textOnly(claim.explanation || claim.unresolved_reason, "No claim explanation returned."), "muted"));
+    list.append(card);
+  }
+  section.append(list);
+  return section;
+}
+
+function renderSearchSummary(searchSummary) {
+  const section = div("panel search-panel");
+  section.append(el("h3", "Gemini Google Search"));
+  if (!searchSummary) {
+    section.append(el("p", "Gemini Google Search grounding was not run.", "muted"));
+    return section;
+  }
+  section.append(el("p", textOnly(searchSummary.scope, "Gemini searches the live public web with Google Search grounding.")));
+  section.append(el("p", `${Number(searchSummary.total_queries || 0)} searches, ${Number(searchSummary.total_results || 0)} grounded results, ${Number(searchSummary.reviewed_source_count || 0)} cited sources`, "muted"));
+  const queries = Array.isArray(searchSummary.queries) ? searchSummary.queries.slice(0, 6) : [];
+  if (queries.length > 0) {
+    const list = el("ul", null, "warnings");
+    for (const query of queries) {
+      list.append(el("li", textOnly(query.query)));
+    }
+    section.append(list);
+  }
+  if (Array.isArray(searchSummary.limitations) && searchSummary.limitations.length > 0) {
+    section.append(el("p", textOnly(searchSummary.limitations.join(" ")), "muted"));
+  }
+  return section;
+}
+
+function renderEvidenceSources(result) {
   const section = div("panel sources-panel");
-  section.append(el("h3", "Relevant sources"));
-  const evidence = verification && Array.isArray(verification.evidence) ? verification.evidence : [];
-  if (evidence.length === 0) {
+  section.append(el("h3", "Reviewed sources"));
+  const sources = Array.isArray(result.sources) && result.sources.length > 0
+    ? result.sources
+    : result.verification && Array.isArray(result.verification.evidence)
+      ? result.verification.evidence
+      : [];
+  if (sources.length === 0) {
     section.append(el("p", "No structured source records were returned.", "muted"));
     return section;
   }
   const list = div("source-grid");
-  for (const item of evidence) {
+  for (const item of sources) {
     list.append(renderSourceCard(item));
   }
   section.append(list);
@@ -75,6 +134,12 @@ function renderSourceCard(item) {
     descriptor.fetched ? "Fetched" : "Source not fetched",
     descriptor.usedInExplanation ? "Used in explanation" : "Not used in explanation"
   ]));
+  if (item.fetch_message) {
+    card.append(el("p", textOnly(item.fetch_message), "muted"));
+  }
+  if (item.qualification_explanation) {
+    card.append(el("p", textOnly(item.qualification_explanation), "muted"));
+  }
   if (descriptor.url) {
     const link = el("a", "Open source", "button link-button");
     link.href = descriptor.url;
@@ -90,11 +155,16 @@ function renderSourceCard(item) {
 
 function renderStyleSignal(result) {
   const section = div("panel style-panel");
-  section.append(el("h3", "Writing-style signal"));
-  section.append(el("p", `${textOnly(result.style_signal, "UNKNOWN")} - ${result.style_confidence === null || result.style_confidence === undefined ? "n/a" : Math.round(result.style_confidence * 100) + "%"} confidence`));
-  section.append(el("p", "Writing-style risk does not prove that the claim is false.", "technical-note"));
-  if (result.style_warning) {
-    section.append(el("p", textOnly(result.style_warning), "muted"));
+  const assessment = result.style_assessment || {};
+  const displayText = assessment.display_text || fallbackStyleText(result.style_signal);
+  const displayConfidence = assessment.display_confidence || fallbackStyleConfidence(result.style_confidence);
+  const limitation = assessment.limitation || "This assessment evaluates writing patterns only. Writing style alone cannot establish whether the claims are true or false.";
+  section.append(el("h3", "Writing-style assessment"));
+  section.append(el("p", textOnly(displayText, "The writing-style assessment is unavailable.")));
+  section.append(el("p", `Style confidence: ${textOnly(displayConfidence, "N/A")}`, "confidence-line"));
+  section.append(el("p", textOnly(limitation), "muted"));
+  if (assessment.warning || result.style_warning) {
+    section.append(el("p", textOnly(assessment.warning || result.style_warning), "muted"));
   }
   return section;
 }
@@ -114,27 +184,33 @@ function renderWarnings(warnings = []) {
   return section;
 }
 
-function renderTechnicalDetails(result) {
-  const details = document.createElement("details");
-  details.className = "panel technical-details";
-  details.append(el("summary", "Technical details"));
-  details.append(el("pre", JSON.stringify({
-    analysis_id: result.analysis_id,
-    request_id: result.request_id,
-    trace_id: result.trace_id,
-    input_type: result.input_type,
-    source_url: result.source_url,
-    forensic_results: result.forensic_results || []
-  }, null, 2)));
-  return details;
-}
-
 function badgeList(values) {
   const group = div("badge-list");
   for (const value of values) {
     group.append(el("span", value, "badge"));
   }
   return group;
+}
+
+function fallbackStyleText(signal) {
+  if (signal === "LOW_STYLE_RISK") {
+    return "The writing style seems similar to real or legitimate news reporting.";
+  }
+  if (signal === "HIGH_STYLE_RISK") {
+    return "The writing style seems similar to fake, misleading, or fabricated content.";
+  }
+  return "The writing-style assessment is unavailable.";
+}
+
+function fallbackStyleConfidence(confidence) {
+  if (confidence === null || confidence === undefined) {
+    return "N/A";
+  }
+  if (confidence >= 0.9995) {
+    return ">99.9%";
+  }
+  const bounded = Math.max(0, Math.min(Number(confidence), 0.999));
+  return `${(bounded * 100).toFixed(1)}%`;
 }
 
 function stanceLabel(stance) {

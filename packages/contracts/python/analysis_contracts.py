@@ -8,7 +8,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 AnalysisStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
-Quality = Literal["HIGH", "MEDIUM", "LOW"]
+Quality = Literal["HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+ConfidenceLevel = Literal["VERY_HIGH", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
 InputTypeCode = Literal["text", "url", "file", "unknown"]
 StyleSignal = Literal["LOW_STYLE_RISK", "HIGH_STYLE_RISK", "UNKNOWN", "ERROR"]
 MediaTypeCode = Literal["image", "audio", "video"]
@@ -70,6 +71,50 @@ class ApiErrorResponse(BaseModel):
     request_id: str
     trace_id: str
     details: list[dict[str, object]] = Field(default_factory=list)
+
+
+class AuthSignInRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=128)
+    tenant_id: str = Field(default="local", min_length=1, max_length=128)
+    client_type: str = Field(default="web", min_length=1, max_length=64)
+
+    @field_validator("username")
+    @classmethod
+    def username_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("username must not be blank")
+        return value
+
+
+class AuthUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    tenant_id: str
+    roles: list[str] = Field(default_factory=list)
+
+
+class AuthSessionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    authenticated: bool
+    user: AuthUserResponse | None = None
+    access_token: str | None = None
+    token_type: Literal["bearer"] = "bearer"
+    expires_at: datetime | None = None
+    request_id: str
+    trace_id: str
+
+
+class AuthSignOutResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    signed_out: bool
+    message: str
+    request_id: str
+    trace_id: str
 
 
 class AnalyzeTextRequest(BaseModel):
@@ -363,6 +408,137 @@ class RawEvidenceAssessment(BaseModel):
     explanation: str = ""
 
 
+class StyleAssessmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    signal: StyleSignal
+    display_label: str
+    display_text: str
+    confidence_level: ConfidenceLevel
+    confidence_score: float | None = Field(default=None, ge=0, le=1)
+    display_confidence: str
+    scope_reliable: bool
+    word_count: int
+    minimum_word_count: int
+    warning: str | None = None
+    limitation: str
+
+
+class ClaimResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    sequence: int
+    claim_text: str
+    normalized_claim: str
+    importance: Literal["HIGH", "MEDIUM", "LOW"]
+    claim_type: str
+    entities: list[str] = Field(default_factory=list)
+    people: list[str] = Field(default_factory=list)
+    organizations: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
+    detected_dates: list[str] = Field(default_factory=list)
+    publication_period: str | None = None
+    verifiability: str
+    search_queries: list[str] = Field(default_factory=list)
+    verification_status: str
+    confidence: Quality
+    explanation: str
+    supporting_source_ids: list[str] = Field(default_factory=list)
+    contradicting_source_ids: list[str] = Field(default_factory=list)
+    unresolved_reason: str | None = None
+
+
+class SearchQueryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query_id: str
+    claim_id: str
+    query: str
+    query_type: str
+    result_count: int
+    searched_at: datetime
+    status: Literal["completed", "failed"]
+    message: str = ""
+
+
+class SearchSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: str = "Gemini searches the live public web with Google Search grounding."
+    queries: list[SearchQueryResponse] = Field(default_factory=list)
+    total_queries: int = 0
+    total_results: int = 0
+    reviewed_source_count: int = 0
+    qualifying_source_count: int = 0
+    limitations: list[str] = Field(default_factory=list)
+
+
+class SourcePassageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    relevance_score: float = Field(ge=0, le=1)
+
+
+class ReviewedSourceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str
+    related_claim_ids: list[str] = Field(default_factory=list)
+    citation_label: str
+    url: str
+    title: str = ""
+    publisher: str = ""
+    domain: str = ""
+    source_type: str
+    reliability: Quality
+    reliability_reason: str
+    stance: str
+    fetched: bool
+    fetch_message: str
+    relevant_passages: list[SourcePassageResponse] = Field(default_factory=list)
+    qualification: Literal["qualifies", "does_not_qualify"]
+    qualification_explanation: str
+    used_in_explanation: bool = False
+
+
+class GeminiClaimAssessmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    verdict: str
+    confidence: Quality
+    supporting_source_ids: list[str] = Field(default_factory=list)
+    contradicting_source_ids: list[str] = Field(default_factory=list)
+    explanation: str = ""
+    unresolved_reason: str | None = None
+
+
+class GeminiEvidenceAssessmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["gemini", "gemini_google_search", "disabled", "unavailable"]
+    grounding_used: bool
+    assessment: str | None = None
+    confidence: Quality
+    evidence_quality: Quality
+    explanation: str
+    claims: list[GeminiClaimAssessmentResponse] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    recommendation: str
+    error_message: str | None = None
+
+
+class FinalAssessmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: str
+    confidence: Quality
+    reason: str
+    policy_version: str
+
+
 class VerificationResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -414,6 +590,12 @@ class AnalysisResponse(BaseModel):
     style_word_count: int
     style_minimum_word_count: int
     style_warning: str | None = None
+    style_assessment: StyleAssessmentResponse
+    claims: list[ClaimResponse] = Field(default_factory=list)
+    search_summary: SearchSummaryResponse = Field(default_factory=SearchSummaryResponse)
+    sources: list[ReviewedSourceResponse] = Field(default_factory=list)
+    gemini_evidence: GeminiEvidenceAssessmentResponse | None = None
+    final_assessment: FinalAssessmentResponse
     verification: VerificationResponse | None
     forensic_results: list[ForensicPluginResultResponse] = Field(default_factory=list)
     final_verdict: str

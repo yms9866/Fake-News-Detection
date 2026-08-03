@@ -50,7 +50,9 @@ def format_web_context(
 class DuckDuckGoSearchProvider:
     def search(self, claim_text: str, max_results: int) -> SearchContext:
         query = make_search_query(claim_text)
+        return self.search_query(query=query, max_results=max_results)
 
+    def search_query(self, query: str, max_results: int) -> SearchContext:
         try:
             try:
                 ddgs_module = importlib.import_module("ddgs")

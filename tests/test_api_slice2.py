@@ -10,6 +10,10 @@ from fastapi.testclient import TestClient
 from apps.api.app.factory import create_app
 from apps.api.app.state import ApiContainer, InMemoryAnalysisRepository, ModelRegistry
 from packages.backend.fnd.adapters.extraction.text import DirectTextExtractor
+from packages.backend.fnd.adapters.llm.gemini_grounding import (
+    GeminiGroundedSearchEvidenceProvider,
+)
+from packages.backend.fnd.application.bootstrap import build_analyze_content_workflow
 from packages.backend.fnd.application.services.verdict_policy import VerdictPolicy
 from packages.backend.fnd.application.workflows.analyze_content import (
     AnalyzeContentWorkflow,
@@ -219,6 +223,16 @@ class ApiSlice2Tests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
+    def test_default_workflow_uses_gemini_grounded_search_provider(self) -> None:
+        workflow = build_analyze_content_workflow(make_settings(self.model_path))
+
+        self.assertIsInstance(
+            workflow.search_provider,
+            GeminiGroundedSearchEvidenceProvider,
+        )
+        self.assertIs(workflow.search_provider, workflow.evidence_provider)
+        self.assertIsNone(workflow.evidence_review_pipeline)
+
     def test_liveness_succeeds_without_calling_workflow(self) -> None:
         response = self.client.get("/v1/health/live")
 
@@ -258,6 +272,14 @@ class ApiSlice2Tests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "completed")
         self.assertEqual(response.json()["input_type"], "text")
         self.assertIn("style_scope_reliable", response.json())
+        self.assertEqual(
+            response.json()["style_assessment"]["display_text"],
+            "The writing style seems similar to real or legitimate news reporting.",
+        )
+        self.assertIn(
+            "Writing style alone cannot establish",
+            response.json()["style_assessment"]["limitation"],
+        )
 
     def test_url_endpoint_calls_workflow(self) -> None:
         self.workflow.next_result = self.workflow._result(
@@ -341,6 +363,44 @@ class ApiSlice2Tests(unittest.TestCase):
         self.assertEqual(response.headers["X-Trace-ID"], "trace-test")
         self.assertEqual(response.json()["request_id"], "req-test")
 
+    def test_auth_sign_in_restore_and_sign_out_revoke_session(self) -> None:
+        sign_in = self.client.post(
+            "/v1/auth/sign-in",
+            json={
+                "username": "local-reviewer",
+                "tenant_id": "local",
+                "client_type": "web",
+            },
+        )
+        self.assertEqual(sign_in.status_code, 200)
+        session = sign_in.json()
+        self.assertTrue(session["authenticated"])
+        self.assertEqual(session["user"]["user_id"], "local-reviewer")
+        token = session["access_token"]
+        self.assertIsInstance(token, str)
+
+        restored = self.client.get(
+            "/v1/auth/session",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(restored.status_code, 200)
+        self.assertTrue(restored.json()["authenticated"])
+        self.assertIsNone(restored.json()["access_token"])
+
+        signed_out = self.client.post(
+            "/v1/auth/sign-out",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(signed_out.status_code, 200)
+        self.assertTrue(signed_out.json()["signed_out"])
+
+        rejected = self.client.get(
+            "/v1/auth/session",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(rejected.status_code, 401)
+        self.assertEqual(rejected.json()["error_code"], "AUTHENTICATION_REQUIRED")
+
     def test_wildcard_cors_is_not_enabled(self) -> None:
         self.assertNotIn("*", self.app.state.allowed_origins)
         with self.assertRaises(ValueError):
@@ -423,7 +483,10 @@ class ApiSlice2Tests(unittest.TestCase):
         self.assertEqual(verification["verdict"], "UNVERIFIED")
         self.assertEqual(verification["evidence_quality"], "LOW")
         self.assertEqual(verification["qualifying_source_count"], 0)
-        self.assertEqual(verification["raw_assessment"]["verdict"], "REAL")
+        self.assertIsNone(verification["raw_assessment"])
+        self.assertIsNone(verification["web_context"])
+        self.assertIn("final_assessment", body)
+        self.assertEqual(body["final_assessment"]["verdict"], "UNVERIFIED")
         self.assertEqual(verification["evidence"][0]["source_id"], "source-1")
         self.assertEqual(verification["evidence"][0]["source_number"], 1)
         self.assertEqual(verification["evidence"][0]["domain"], "news.example")
@@ -483,6 +546,17 @@ class ApiSlice2Tests(unittest.TestCase):
         self.assertIn("style_word_count", properties)
         self.assertIn("style_minimum_word_count", properties)
         self.assertIn("style_warning", properties)
+        self.assertIn("style_assessment", properties)
+        self.assertIn("claims", properties)
+        self.assertIn("search_summary", properties)
+        self.assertIn("sources", properties)
+        self.assertIn("gemini_evidence", properties)
+        self.assertIn("final_assessment", properties)
+        self.assertIn("StyleAssessmentResponse", schemas)
+        self.assertIn("ClaimResponse", schemas)
+        self.assertIn("ReviewedSourceResponse", schemas)
+        self.assertIn("GeminiEvidenceAssessmentResponse", schemas)
+        self.assertIn("FinalAssessmentResponse", schemas)
         verification = schemas["VerificationResponse"]["properties"]
         self.assertIn("evidence_summary_items", verification)
         self.assertIn("qualifying_source_count", verification)
@@ -505,6 +579,12 @@ class ApiSlice2Tests(unittest.TestCase):
             "style_word_count",
             "style_minimum_word_count",
             "style_warning",
+            "style_assessment",
+            "claims",
+            "search_summary",
+            "sources",
+            "gemini_evidence",
+            "final_assessment",
             "source_id",
             "qualifying_source_count",
             "raw_assessment",

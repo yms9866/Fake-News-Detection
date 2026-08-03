@@ -66,6 +66,13 @@ export class DesktopApiClient {
     this.pairingToken = typeof settings.pairingToken === "string" && settings.pairingToken.trim()
       ? settings.pairingToken.trim()
       : null;
+    this.authToken = typeof settings.authToken === "string" && settings.authToken.trim()
+      ? settings.authToken.trim()
+      : null;
+  }
+
+  setAuthToken(token) {
+    this.authToken = typeof token === "string" && token.trim() ? token.trim() : null;
   }
 
   async live() {
@@ -78,6 +85,46 @@ export class DesktopApiClient {
 
   async models() {
     return await this.getJson("/v1/models");
+  }
+
+  async signIn(payload = {}) {
+    const response = await this.requestJson("/v1/auth/sign-in", {
+      method: "POST",
+      body: JSON.stringify({
+        username: String(payload.username || "desktop-reviewer").trim() || "desktop-reviewer",
+        tenant_id: String(payload.tenant_id || "local").trim() || "local",
+        client_type: "desktop"
+      }),
+      headers: { "Content-Type": "application/json" }
+    });
+    if (response && response.access_token) {
+      this.setAuthToken(response.access_token);
+    }
+    return response;
+  }
+
+  async restoreSession() {
+    return await this.getJson("/v1/auth/session");
+  }
+
+  async refreshSession() {
+    const response = await this.requestJson("/v1/auth/refresh", {
+      method: "POST"
+    });
+    if (response && response.access_token) {
+      this.setAuthToken(response.access_token);
+    }
+    return response;
+  }
+
+  async signOut() {
+    try {
+      return await this.requestJson("/v1/auth/sign-out", {
+        method: "POST"
+      });
+    } finally {
+      this.setAuthToken(null);
+    }
   }
 
   async analyzeText(payload) {
@@ -242,6 +289,9 @@ export class DesktopApiClient {
     const headers = new Headers(init.headers || {});
     if (this.pairingToken) {
       headers.set("X-Pairing-Token", this.pairingToken);
+    }
+    if (this.authToken) {
+      headers.set("Authorization", `Bearer ${this.authToken}`);
     }
     try {
       const response = await fetch(`${this.backendOrigin}${path}`, {

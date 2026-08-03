@@ -4,7 +4,7 @@ import { renderResultView } from "./components/result-view.js";
 import { compactHistoryItem } from "./components/safe-rendering.js";
 import { renderConnectionStatus, renderEmptyState, renderErrorPanel, renderLoadingState } from "./components/status-panels.js";
 import { requestCameraImage, requestDisplayCapture, requestMicrophone, stopStream } from "./capture/browser-capture.js";
-import { createDevAuthAdapter } from "./auth/dev-auth.js";
+import { createBackendAuthAdapter } from "./auth/dev-auth.js";
 import { createHistoryStore } from "./stores/history-store.js";
 import { createCsrfToken } from "./security/csrf.js";
 
@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS = {
 
 export function renderWebApp(root) {
   const client = createWebApiClient(DEFAULT_SETTINGS);
-  const auth = createDevAuthAdapter();
+  const auth = createBackendAuthAdapter(client);
   const history = createHistoryStore();
   const state = {
     route: "analyze",
@@ -57,10 +57,11 @@ export function renderWebApp(root) {
         state.session = await auth.signIn("local-reviewer");
       });
     },
-    signOut() {
-      auth.signOut();
-      state.session = null;
-      draw();
+    async signOut() {
+      await run(async () => {
+        await auth.signOut();
+        state.session = null;
+      });
     },
     async analyzeText(payload) {
       await run(async () => setResult(await client.analyzeText(payload)));
@@ -281,7 +282,10 @@ export function renderWebApp(root) {
     screen.append(field("Frame text", text));
     screen.append(button("Start live session", actions.startLive), button("Submit frame", () => actions.submitLiveText(text.value)), button("Verify", actions.verifyLive));
     if (state.live) {
-      screen.append(el("p", `${state.live.status}: ${state.live.buffer_chars || 0} chars`, "muted"));
+      screen.append(el("p", liveStatusText(state.live), "muted"));
+      if (state.live.stable_text) {
+        screen.append(el("p", state.live.stable_text, "muted"));
+      }
     }
     return screen;
   }
@@ -345,6 +349,19 @@ export function renderWebApp(root) {
   draw();
   actions.checkConnection();
   return { state, actions, client, auth };
+}
+
+function liveStatusText(live) {
+  const labels = {
+    awaiting_permission: "Waiting for screen access.",
+    capturing: live && live.stable_text ? "Text detected. Ready to verify." : "Looking for readable text.",
+    paused: "Live OCR is paused.",
+    finalizing: "Preparing the final Live OCR result.",
+    completed: "Live OCR stopped.",
+    cancelled: "Live OCR cancelled.",
+    failed: "Live OCR is temporarily unavailable."
+  };
+  return labels[live && live.status] || "Preparing Live OCR.";
 }
 
 function normalizeUiError(error) {

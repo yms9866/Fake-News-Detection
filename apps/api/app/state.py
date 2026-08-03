@@ -18,10 +18,20 @@ from packages.backend.fnd.adapters.live.in_memory import (
     InMemoryLiveSessionEventRepository,
     InMemoryLiveSessionRepository,
 )
+from packages.backend.fnd.adapters.persistence.in_memory_enterprise import (
+    InMemoryAuditRepository,
+    InMemoryDeviceRepository,
+    InMemorySessionRepository,
+    InMemorySessionTokenRepository,
+)
 from packages.backend.fnd.adapters.media.artifacts import TemporaryLocalArtifactStore
 from packages.backend.fnd.adapters.media.preprocessors import LocalMediaPreprocessor
 from packages.backend.fnd.adapters.media.probe import LocalMediaProbe
 from packages.backend.fnd.application.services.forensics import ForensicPluginRegistry
+from packages.backend.fnd.application.services.auth import (
+    AuthService,
+    LocalSessionAuthService,
+)
 from packages.backend.fnd.application.services.media_jobs import (
     MediaAnalysisJobService,
     MediaAnalysisSubmissionService,
@@ -180,6 +190,11 @@ class ApiContainer:
     live_events: InMemoryLiveSessionEventRepository | None = None
     live_service: LiveOcrSessionService | None = None
     forensic_plugins: ForensicPluginRegistry | None = None
+    audit_repository: InMemoryAuditRepository | None = None
+    device_repository: InMemoryDeviceRepository | None = None
+    session_repository: InMemorySessionRepository | None = None
+    token_repository: InMemorySessionTokenRepository | None = None
+    auth_service: LocalSessionAuthService | None = None
 
     def __post_init__(self) -> None:
         self.forensic_plugins = self.forensic_plugins or ForensicPluginRegistry(
@@ -189,6 +204,25 @@ class ApiContainer:
         if not self.settings.enable_forensic_plugins:
             for plugin in self.forensic_plugins.list_plugins():
                 self.forensic_plugins.disable(plugin.metadata.name)
+        self.audit_repository = self.audit_repository or InMemoryAuditRepository()
+        self.device_repository = self.device_repository or InMemoryDeviceRepository()
+        self.session_repository = self.session_repository or InMemorySessionRepository()
+        self.token_repository = (
+            self.token_repository or InMemorySessionTokenRepository()
+        )
+        assert self.audit_repository is not None
+        assert self.device_repository is not None
+        assert self.session_repository is not None
+        assert self.token_repository is not None
+        self.auth_service = self.auth_service or LocalSessionAuthService(
+            auth=AuthService(
+                sessions=self.session_repository,
+                devices=self.device_repository,
+                audit=self.audit_repository,
+            ),
+            sessions=self.session_repository,
+            tokens=self.token_repository,
+        )
         self.jobs = self.jobs or InMemoryJobRepository()
         self.job_events = self.job_events or InMemoryJobEventRepository(
             retention_limit=self.settings.job_event_retention_limit

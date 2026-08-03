@@ -75,9 +75,11 @@ export function renderLiveOcrScreen(appState, actions) {
 
   if (live) {
     const status = div("live-status");
-    status.append(el("h2", live.status));
-    status.append(el("p", live.visible_indicator_active ? "Capture indicator active" : "Capture indicator off", "muted"));
-    status.append(el("p", `Frames: ${live.frame_count}, skipped: ${live.skipped_frame_count}, buffer: ${live.buffer_chars}`, "muted"));
+    status.append(el("h2", liveStatusText(live)));
+    status.append(el("p", live.visible_indicator_active ? "Capture is active." : "Capture is paused or stopped.", "muted"));
+    if (live.stable_text) {
+      status.append(el("p", live.stable_text, "muted"));
+    }
     if (live.latest_verification) {
       status.append(el("p", `${live.latest_verification.final_verdict}: ${live.latest_verification.reason}`));
     }
@@ -85,4 +87,17 @@ export function renderLiveOcrScreen(appState, actions) {
   }
 
   return screen;
+}
+
+function liveStatusText(live) {
+  const labels = {
+    awaiting_permission: "Waiting for permission",
+    capturing: live && live.stable_text ? "Text detected" : "Looking for readable text",
+    paused: "Paused",
+    finalizing: "Preparing result",
+    completed: "Stopped",
+    cancelled: "Cancelled",
+    failed: "Live OCR unavailable"
+  };
+  return labels[live && live.status] || "Preparing Live OCR";
 }

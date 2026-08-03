@@ -66,6 +66,8 @@ def register_error_handlers(app: FastAPI) -> None:
             status_code = status.HTTP_413_CONTENT_TOO_LARGE
         elif exc.code in {"JOB_NOT_FOUND", "LIVE_SESSION_NOT_FOUND"}:
             status_code = status.HTTP_404_NOT_FOUND
+        elif exc.code in {"AUTHENTICATION_REQUIRED", "SESSION_EXPIRED"}:
+            status_code = status.HTTP_401_UNAUTHORIZED
         elif exc.code == "LIVE_PERMISSION_DENIED":
             status_code = status.HTTP_403_FORBIDDEN
         payload = error_payload(

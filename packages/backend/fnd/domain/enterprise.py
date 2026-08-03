@@ -81,6 +81,18 @@ class UserSession:
 
 
 @dataclass(frozen=True)
+class SessionToken:
+    token_hash: str
+    session_id: str
+    expires_at: datetime
+    revoked_at: datetime | None = None
+
+    @property
+    def active(self) -> bool:
+        return self.revoked_at is None and self.expires_at > utc_now()
+
+
+@dataclass(frozen=True)
 class AuditEvent:
     event_id: str
     tenant_id: str

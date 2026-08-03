@@ -10,7 +10,21 @@ services:
   redis:
     image: redis:7-alpine
   postgres:
+    profiles: ["postgres"]
     image: postgres:16-alpine
     environment:
       POSTGRES_PASSWORD: fnd-local
       POSTGRES_DB: fnd
+    ports:
+      - "127.0.0.1:5432:5432"
+  mysql:
+    profiles: ["mysql"]
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: fnd-local
+      MYSQL_DATABASE: fnd
+      MYSQL_USER: fnd
+      MYSQL_PASSWORD: fnd-local
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    ports:
+      - "127.0.0.1:3306:3306"

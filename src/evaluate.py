@@ -152,3 +152,4 @@ def print_metrics(metrics: dict) -> None:
 
     print("\nClassification Report:")
     print(metrics["report"])
+

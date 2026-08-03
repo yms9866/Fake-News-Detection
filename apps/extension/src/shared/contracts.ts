@@ -15,7 +15,8 @@ export type LiveSessionStatus =
   | "completed"
   | "cancelled"
   | "failed";
-export type Quality = "HIGH" | "MEDIUM" | "LOW";
+export type Quality = "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+export type ConfidenceLevel = "VERY_HIGH" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
 export type StyleSignal = "LOW_STYLE_RISK" | "HIGH_STYLE_RISK" | "UNKNOWN" | "ERROR";
 export type ClientAnalysisState =
   | "idle"
@@ -44,6 +45,7 @@ export type BackendJobStatus =
 export interface ConnectionCredentials {
   backendOrigin: string;
   pairingToken?: string;
+  authToken?: string;
 }
 
 export interface ExtensionSettings extends ConnectionCredentials {
@@ -115,6 +117,110 @@ export interface ForensicPluginResultResponse {
   metadata: Record<string, unknown>;
 }
 
+export interface StyleAssessmentResponse {
+  signal: StyleSignal;
+  display_label: string;
+  display_text: string;
+  confidence_level: ConfidenceLevel;
+  confidence_score: number | null;
+  display_confidence: string;
+  scope_reliable: boolean;
+  word_count: number;
+  minimum_word_count: number;
+  warning: string | null;
+  limitation: string;
+}
+
+export interface ClaimResponse {
+  claim_id: string;
+  sequence: number;
+  claim_text: string;
+  normalized_claim: string;
+  importance: "HIGH" | "MEDIUM" | "LOW";
+  claim_type: string;
+  entities: string[];
+  people: string[];
+  organizations: string[];
+  locations: string[];
+  detected_dates: string[];
+  publication_period: string | null;
+  verifiability: string;
+  search_queries: string[];
+  verification_status: string;
+  confidence: Quality;
+  explanation: string;
+  supporting_source_ids: string[];
+  contradicting_source_ids: string[];
+  unresolved_reason: string | null;
+}
+
+export interface SearchSummaryResponse {
+  scope: string;
+  queries: Array<{
+    query_id: string;
+    claim_id: string;
+    query: string;
+    query_type: string;
+    result_count: number;
+    searched_at: string;
+    status: "completed" | "failed";
+    message: string;
+  }>;
+  total_queries: number;
+  total_results: number;
+  reviewed_source_count: number;
+  qualifying_source_count: number;
+  limitations: string[];
+}
+
+export interface ReviewedSourceResponse {
+  source_id: string;
+  related_claim_ids: string[];
+  citation_label: string;
+  url: string;
+  title: string;
+  publisher: string;
+  domain: string;
+  source_type: string;
+  reliability: Quality;
+  reliability_reason: string;
+  stance: string;
+  fetched: boolean;
+  fetch_message: string;
+  relevant_passages: Array<{ text: string; relevance_score: number }>;
+  qualification: "qualifies" | "does_not_qualify";
+  qualification_explanation: string;
+  used_in_explanation: boolean;
+}
+
+export interface GeminiEvidenceAssessmentResponse {
+  provider: "gemini" | "gemini_google_search" | "disabled" | "unavailable";
+  grounding_used: boolean;
+  assessment: string | null;
+  confidence: Quality;
+  evidence_quality: Quality;
+  explanation: string;
+  claims: Array<{
+    claim_id: string;
+    verdict: string;
+    confidence: Quality;
+    supporting_source_ids: string[];
+    contradicting_source_ids: string[];
+    explanation: string;
+    unresolved_reason: string | null;
+  }>;
+  limitations: string[];
+  recommendation: string;
+  error_message: string | null;
+}
+
+export interface FinalAssessmentResponse {
+  verdict: string;
+  confidence: Quality;
+  reason: string;
+  policy_version: string;
+}
+
 export interface AnalysisResponse {
   analysis_id: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -129,6 +235,12 @@ export interface AnalysisResponse {
   style_word_count: number;
   style_minimum_word_count: number;
   style_warning: string | null;
+  style_assessment: StyleAssessmentResponse;
+  claims: ClaimResponse[];
+  search_summary: SearchSummaryResponse;
+  sources: ReviewedSourceResponse[];
+  gemini_evidence: GeminiEvidenceAssessmentResponse | null;
+  final_assessment: FinalAssessmentResponse;
   verification: VerificationResponse | null;
   forensic_results: ForensicPluginResultResponse[];
   final_verdict: string;
@@ -207,6 +319,10 @@ export interface AnalysisResultSummary {
   clientState: ClientAnalysisState;
   backendJobStatus?: BackendJobStatus;
   styleSignal?: StyleSignal;
+  styleText?: string;
+  styleConfidence?: string;
+  claimCount?: number;
+  qualifyingSourceCount?: number;
   styleScopeReliable?: boolean;
   finalVerdict?: string;
   confidence?: Quality;

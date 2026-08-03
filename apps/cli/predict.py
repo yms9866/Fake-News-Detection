@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from apps.cli.bootstrap import build_cli_analyze_content_workflow
 from apps.cli.reporting import print_analysis_report
-from packages.backend.fnd.application.bootstrap import build_analyze_content_workflow
 from packages.backend.fnd.config.settings import Settings
 from packages.backend.fnd.domain.entities import AnalyzeContentCommand
 from packages.backend.fnd.domain.errors import FndError
@@ -75,7 +75,7 @@ def main() -> None:
         request_timeout_seconds=settings.request_timeout_seconds,
     )
 
-    workflow = build_analyze_content_workflow(settings)
+    workflow = build_cli_analyze_content_workflow(settings)
 
     try:
         result = workflow.analyze(command_from_args(args))

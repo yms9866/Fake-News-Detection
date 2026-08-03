@@ -15,15 +15,18 @@ from packages.backend.fnd.domain.enterprise import (
     DeviceRegistration,
     Principal,
     Role,
+    SessionToken,
     TenantContext,
     UserSession,
     new_session,
     require_role,
 )
+from packages.backend.fnd.domain.errors import AuthenticationError
 from packages.backend.fnd.ports.enterprise import (
     AuditRepository,
     DeviceRepository,
     SessionRepository,
+    SessionTokenRepository,
 )
 
 
@@ -45,6 +48,20 @@ class OidcAuthorizationRequest:
     nonce: str
     code_verifier: str
     code_challenge: str
+
+
+@dataclass(frozen=True)
+class LocalSignInCommand:
+    username: str
+    tenant_id: str = "local"
+    client_type: str = "web"
+
+
+@dataclass(frozen=True)
+class AuthSessionBundle:
+    principal: Principal
+    session: UserSession
+    access_token: str
 
 
 def pkce_challenge(verifier: str) -> str:
@@ -183,3 +200,141 @@ class AuthService:
                 resource_id=resource_id,
             )
         )
+
+
+class LocalSessionAuthService:
+    """Local-first auth facade for API clients.
+
+    This is intentionally small: external OIDC can still be added behind the same
+    route contract, while local mode gives every client real session lifecycle
+    semantics instead of no-op sign-in controls.
+    """
+
+    def __init__(
+        self,
+        *,
+        auth: AuthService,
+        sessions: SessionRepository,
+        tokens: SessionTokenRepository,
+        lifetime: timedelta = timedelta(hours=8),
+    ) -> None:
+        self._auth = auth
+        self._sessions = sessions
+        self._tokens = tokens
+        self._lifetime = lifetime
+
+    def sign_in(self, command: LocalSignInCommand) -> AuthSessionBundle:
+        username = _normalize_username(command.username)
+        principal = Principal(
+            user_id=username,
+            tenant_id=_normalize_tenant(command.tenant_id),
+            roles=(Role.USER, Role.REVIEWER),
+        )
+        device = self._auth.register_device(
+            principal=principal,
+            client_type=_normalize_client_type(command.client_type),
+        )
+        session = self._auth.create_session(
+            principal,
+            device.device_id,
+            lifetime=self._lifetime,
+        )
+        access_token = token_urlsafe(36)
+        self._tokens.save(
+            SessionToken(
+                token_hash=hash_session_token(access_token),
+                session_id=session.session_id,
+                expires_at=session.expires_at,
+            )
+        )
+        return AuthSessionBundle(
+            principal=principal,
+            session=session,
+            access_token=access_token,
+        )
+
+    def restore(self, access_token: str) -> AuthSessionBundle:
+        token = self._active_token(access_token)
+        session = self._sessions.get(token.session_id)
+        if session is None or not session.active:
+            raise AuthenticationError("Your session has expired. Please sign in again.")
+        return AuthSessionBundle(
+            principal=session.principal,
+            session=session,
+            access_token=access_token,
+        )
+
+    def refresh(self, access_token: str) -> AuthSessionBundle:
+        current = self.restore(access_token)
+        refreshed = new_session(
+            principal=current.principal,
+            device_id=current.session.device_id,
+            lifetime=self._lifetime,
+        )
+        now = datetime.now(tz=refreshed.expires_at.tzinfo)
+        self._sessions.save(refreshed)
+        self._tokens.save(
+            SessionToken(
+                token_hash=hash_session_token(access_token),
+                session_id=current.session.session_id,
+                expires_at=current.session.expires_at,
+                revoked_at=now,
+            )
+        )
+        new_token = token_urlsafe(36)
+        self._tokens.save(
+            SessionToken(
+                token_hash=hash_session_token(new_token),
+                session_id=refreshed.session_id,
+                expires_at=refreshed.expires_at,
+            )
+        )
+        return AuthSessionBundle(
+            principal=refreshed.principal,
+            session=refreshed,
+            access_token=new_token,
+        )
+
+    def sign_out(self, access_token: str) -> None:
+        token = self._active_token(access_token)
+        session = self._sessions.get(token.session_id)
+        now = datetime.now(tz=token.expires_at.tzinfo)
+        if session is not None:
+            self._auth.revoke_session(session, now)
+        self._tokens.save(
+            SessionToken(
+                token_hash=token.token_hash,
+                session_id=token.session_id,
+                expires_at=token.expires_at,
+                revoked_at=now,
+            )
+        )
+
+    def _active_token(self, access_token: str) -> SessionToken:
+        if not access_token:
+            raise AuthenticationError("Please sign in to continue.")
+        token = self._tokens.get(hash_session_token(access_token))
+        if token is None or not token.active:
+            raise AuthenticationError("Your session has expired. Please sign in again.")
+        return token
+
+
+def hash_session_token(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _normalize_username(value: str) -> str:
+    username = str(value or "").strip().lower()
+    if not username:
+        raise AuthenticationError("Enter a username before signing in.")
+    return username[:128]
+
+
+def _normalize_tenant(value: str) -> str:
+    tenant = str(value or "local").strip().lower()
+    return tenant[:128] or "local"
+
+
+def _normalize_client_type(value: str) -> str:
+    client_type = str(value or "web").strip().lower()
+    return client_type[:64] or "web"

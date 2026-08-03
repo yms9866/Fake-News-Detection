@@ -90,6 +90,19 @@ function analysis(id) {
     style_word_count: 9,
     style_minimum_word_count: 20,
     style_warning: "Short input scope limitation.",
+    style_assessment: {
+      signal: "LOW_STYLE_RISK",
+      display_label: "RESEMBLES_LEGITIMATE_REPORTING",
+      display_text: "The writing style seems similar to real or legitimate news reporting.",
+      confidence_level: "MEDIUM",
+      confidence_score: 0.74,
+      display_confidence: "74.0%",
+      scope_reliable: false,
+      word_count: 9,
+      minimum_word_count: 20,
+      warning: "Short input scope limitation.",
+      limitation: "This assessment evaluates writing patterns only. Writing style alone cannot establish whether the claims are true or false."
+    },
     verification: null,
     final_verdict: "UNVERIFIED",
     confidence: "LOW",
@@ -101,4 +114,3 @@ function analysis(id) {
     trace_id: "trace-analysis"
   };
 }
-

@@ -45,7 +45,8 @@ test("desktop result view uses secure source action and visible evidence labels"
   assert.match(source, /actions\.openSource/u);
   assert.match(source, /aria-label/u);
   assert.equal(source.includes("bridge.external"), false);
-  assert.match(source, /Writing-style risk does not prove that the claim is false\./u);
+  assert.match(source, /Writing style alone cannot establish whether the claims are true or false\./u);
+  assert.match(source, /Gemini evidence analysis/u);
   assert.match(source, /Mentions the topic/u);
   assert.match(source, /Source not fetched/u);
 });

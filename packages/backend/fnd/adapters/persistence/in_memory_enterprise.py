@@ -8,6 +8,7 @@ from packages.backend.fnd.domain.enterprise import (
     AuditEvent,
     DeviceRegistration,
     RetentionPolicy,
+    SessionToken,
     TenantContext,
     UserSession,
 )
@@ -58,6 +59,17 @@ class InMemorySessionRepository:
 
     def get(self, session_id: str) -> UserSession | None:
         return self._items.get(session_id)
+
+
+@dataclass
+class InMemorySessionTokenRepository:
+    _items: dict[str, SessionToken] = field(default_factory=dict)
+
+    def save(self, token: SessionToken) -> None:
+        self._items[token.token_hash] = token
+
+    def get(self, token_hash: str) -> SessionToken | None:
+        return self._items.get(token_hash)
 
 
 @dataclass

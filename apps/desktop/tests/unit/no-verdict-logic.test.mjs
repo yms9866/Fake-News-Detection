@@ -19,7 +19,7 @@ async function readAll() {
 
 test("desktop code does not import backend providers", async () => {
   const text = (await readAll()).map((entry) => entry[1]).join("\n");
-  assert.equal(/ModernBERT|DuckDuckGo|Gemini/u.test(text), false);
+  assert.equal(/ModernBERT|DuckDuckGo|GeminiEvidenceProvider|adapters\/llm|adapters\/search/u.test(text), false);
 });
 
 test("desktop code does not contain deterministic verdict policy functions", async () => {

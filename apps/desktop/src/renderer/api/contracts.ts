@@ -4,10 +4,13 @@ export type {
   AnalyzeTextRequest,
   AnalyzeUrlRequest,
   ApiErrorResponse,
+  ClaimResponse,
   ForensicPluginInfo,
   ForensicPluginResultResponse,
   ForensicPluginsResponse,
   ForensicSignalCode,
+  FinalAssessmentResponse,
+  GeminiEvidenceAssessmentResponse,
   HealthResponse,
   InputTypeCode,
   JobResponse,
@@ -31,6 +34,9 @@ export type {
   PendingAnalysisResponse,
   Quality,
   ReadinessResponse,
+  ReviewedSourceResponse,
+  SearchSummaryResponse,
+  StyleAssessmentResponse,
   StyleSignal,
   VerificationResponse
 } from "../../../../../packages/contracts/typescript/api";

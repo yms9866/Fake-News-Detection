@@ -90,8 +90,32 @@ def ready(
             )
         )
 
+    persistence_backend = container.settings.persistence_backend
+    database_configured = persistence_backend == "memory" or bool(
+        container.settings.database_url
+    )
+    components.append(
+        ComponentStatus(
+            name="persistence",
+            status="ready" if database_configured else "missing",
+            detail=(
+                "In-memory persistence selected."
+                if persistence_backend == "memory"
+                else f"{persistence_backend} persistence selected."
+            ),
+        )
+    )
+
     enterprise_components = {
-        "postgresql": container.settings.database_url,
+        "postgresql": (
+            container.settings.database_url
+            if persistence_backend == "postgresql"
+            else None
+        ),
+        "mysql": (
+            container.settings.database_url if persistence_backend == "mysql" else None
+        ),
+        "database_url": container.settings.database_url,
         "redis_queue": container.settings.redis_url,
         "s3_object_storage": container.settings.s3_bucket,
         "oidc": container.settings.oidc_issuer and container.settings.oidc_client_id,

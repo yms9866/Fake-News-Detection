@@ -40,3 +40,7 @@ class JobNotFoundError(FndError):
 
 class JobCancelledError(FndError):
     code = "JOB_CANCELLED"
+
+
+class AuthenticationError(FndError):
+    code = "AUTHENTICATION_REQUIRED"

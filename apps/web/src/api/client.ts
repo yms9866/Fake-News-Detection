@@ -43,6 +43,11 @@ export class WebApiClient {
     this.backendOrigin = normalizeBackendOrigin(settings.backendOrigin);
     this.timeoutMs = settings.requestTimeoutMs || 60000;
     this.csrfToken = settings.csrfToken || null;
+    this.authToken = settings.authToken || "";
+  }
+
+  setAuthToken(token) {
+    this.authToken = token || "";
   }
 
   live() {
@@ -55,6 +60,32 @@ export class WebApiClient {
 
   models() {
     return this.getJson("/v1/models");
+  }
+
+  async signIn(payload) {
+    const session = await this.requestJson("/v1/auth/sign-in", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    });
+    this.setAuthToken(session.access_token);
+    return session;
+  }
+
+  restoreSession() {
+    return this.getJson("/v1/auth/session");
+  }
+
+  async refreshSession() {
+    const session = await this.requestJson("/v1/auth/refresh", { method: "POST" });
+    this.setAuthToken(session.access_token);
+    return session;
+  }
+
+  async signOut() {
+    const result = await this.requestJson("/v1/auth/sign-out", { method: "POST" });
+    this.setAuthToken("");
+    return result;
   }
 
   analyzeText(payload) {
@@ -165,6 +196,9 @@ export class WebApiClient {
     const headers = new Headers(init.headers || {});
     if (this.csrfToken && init.method && init.method !== "GET") {
       headers.set("X-CSRF-Token", this.csrfToken);
+    }
+    if (this.authToken) {
+      headers.set("Authorization", `Bearer ${this.authToken}`);
     }
     try {
       const response = await fetch(`${this.backendOrigin}${path}`, {

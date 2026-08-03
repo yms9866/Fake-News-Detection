@@ -101,6 +101,14 @@ export function summarizeAnalysis(result, job = null) {
     clientState: result.status === "completed" ? CLIENT_STATES.completed : CLIENT_STATES.processing,
     backendJobStatus: job ? job.status : undefined,
     styleSignal: result.style_signal,
+    styleText: result.style_assessment ? result.style_assessment.display_text : "",
+    styleConfidence: result.style_assessment ? result.style_assessment.display_confidence : "",
+    claimCount: Array.isArray(result.claims) ? result.claims.length : 0,
+    qualifyingSourceCount: result.search_summary
+      ? result.search_summary.qualifying_source_count
+      : result.verification
+        ? result.verification.qualifying_source_count
+        : 0,
     styleScopeReliable: Boolean(result.style_scope_reliable),
     finalVerdict: result.final_verdict,
     confidence: result.confidence,
@@ -109,11 +117,13 @@ export function summarizeAnalysis(result, job = null) {
         ? "failed"
         : "completed"
       : "not_run",
-    sourceCount: result.verification ? result.verification.evidence.length : 0,
+    sourceCount: Array.isArray(result.sources)
+      ? result.sources.length
+      : result.verification
+        ? result.verification.evidence.length
+        : 0,
     warnings: result.warnings || [],
-    reason: result.reason,
-    requestId: result.request_id,
-    traceId: result.trace_id
+    reason: result.reason
   };
 }
 
@@ -124,4 +134,3 @@ export function hasActivePoller(jobId) {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-

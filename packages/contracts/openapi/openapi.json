@@ -48,6 +48,110 @@
         }
       }
     },
+    "/v1/auth/sign-in": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign In",
+        "operationId": "sign_in_v1_auth_sign_in_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthSignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/session": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Restore Session",
+        "operationId": "restore_session_v1_auth_session_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Refresh Session",
+        "operationId": "refresh_session_v1_auth_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/sign-out": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign Out",
+        "operationId": "sign_out_v1_auth_sign_out_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSignOutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/models": {
       "get": {
         "tags": [
@@ -1691,6 +1795,39 @@
             ],
             "title": "Style Warning"
           },
+          "style_assessment": {
+            "$ref": "#/components/schemas/StyleAssessmentResponse"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimResponse"
+            },
+            "type": "array",
+            "title": "Claims"
+          },
+          "search_summary": {
+            "$ref": "#/components/schemas/SearchSummaryResponse"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewedSourceResponse"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "gemini_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeminiEvidenceAssessmentResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final_assessment": {
+            "$ref": "#/components/schemas/FinalAssessmentResponse"
+          },
           "verification": {
             "anyOf": [
               {
@@ -1717,7 +1854,8 @@
             "enum": [
               "HIGH",
               "MEDIUM",
-              "LOW"
+              "LOW",
+              "UNKNOWN"
             ],
             "title": "Confidence"
           },
@@ -1772,6 +1910,8 @@
           "style_scope_reliable",
           "style_word_count",
           "style_minimum_word_count",
+          "style_assessment",
+          "final_assessment",
           "verification",
           "final_verdict",
           "confidence",
@@ -1888,6 +2028,302 @@
           "trace_id"
         ],
         "title": "ApiErrorResponse"
+      },
+      "AuthSessionResponse": {
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "title": "Authenticated"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthUserResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "access_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authenticated",
+          "request_id",
+          "trace_id"
+        ],
+        "title": "AuthSessionResponse"
+      },
+      "AuthSignInRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "tenant_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Tenant Id",
+            "default": "local"
+          },
+          "client_type": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Client Type",
+            "default": "web"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username"
+        ],
+        "title": "AuthSignInRequest"
+      },
+      "AuthSignOutResponse": {
+        "properties": {
+          "signed_out": {
+            "type": "boolean",
+            "title": "Signed Out"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "signed_out",
+          "message",
+          "request_id",
+          "trace_id"
+        ],
+        "title": "AuthSignOutResponse"
+      },
+      "AuthUserResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "tenant_id"
+        ],
+        "title": "AuthUserResponse"
+      },
+      "ClaimResponse": {
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "claim_text": {
+            "type": "string",
+            "title": "Claim Text"
+          },
+          "normalized_claim": {
+            "type": "string",
+            "title": "Normalized Claim"
+          },
+          "importance": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Importance"
+          },
+          "claim_type": {
+            "type": "string",
+            "title": "Claim Type"
+          },
+          "entities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entities"
+          },
+          "people": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "People"
+          },
+          "organizations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Organizations"
+          },
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locations"
+          },
+          "detected_dates": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Detected Dates"
+          },
+          "publication_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Period"
+          },
+          "verifiability": {
+            "type": "string",
+            "title": "Verifiability"
+          },
+          "search_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Queries"
+          },
+          "verification_status": {
+            "type": "string",
+            "title": "Verification Status"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "title": "Confidence"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "supporting_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supporting Source Ids"
+          },
+          "contradicting_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Contradicting Source Ids"
+          },
+          "unresolved_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unresolved Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim_id",
+          "sequence",
+          "claim_text",
+          "normalized_claim",
+          "importance",
+          "claim_type",
+          "verifiability",
+          "verification_status",
+          "confidence",
+          "explanation"
+        ],
+        "title": "ClaimResponse"
       },
       "ComponentStatus": {
         "properties": {
@@ -2027,7 +2463,8 @@
             "enum": [
               "HIGH",
               "MEDIUM",
-              "LOW"
+              "LOW",
+              "UNKNOWN"
             ],
             "title": "Reliability",
             "default": "LOW"
@@ -2113,6 +2550,41 @@
           "media_type"
         ],
         "title": "ExtractionMetadata"
+      },
+      "FinalAssessmentResponse": {
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "title": "Verdict"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "title": "Confidence"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "verdict",
+          "confidence",
+          "reason",
+          "policy_version"
+        ],
+        "title": "FinalAssessmentResponse"
       },
       "ForensicPluginInfo": {
         "properties": {
@@ -2319,6 +2791,159 @@
           "trace_id"
         ],
         "title": "ForensicPluginsResponse"
+      },
+      "GeminiClaimAssessmentResponse": {
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "verdict": {
+            "type": "string",
+            "title": "Verdict"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "title": "Confidence"
+          },
+          "supporting_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supporting Source Ids"
+          },
+          "contradicting_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Contradicting Source Ids"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "default": ""
+          },
+          "unresolved_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unresolved Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim_id",
+          "verdict",
+          "confidence"
+        ],
+        "title": "GeminiClaimAssessmentResponse"
+      },
+      "GeminiEvidenceAssessmentResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "gemini_google_search",
+              "disabled",
+              "unavailable"
+            ],
+            "title": "Provider"
+          },
+          "grounding_used": {
+            "type": "boolean",
+            "title": "Grounding Used"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "title": "Confidence"
+          },
+          "evidence_quality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "title": "Evidence Quality"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/GeminiClaimAssessmentResponse"
+            },
+            "type": "array",
+            "title": "Claims"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "grounding_used",
+          "confidence",
+          "evidence_quality",
+          "explanation",
+          "recommendation"
+        ],
+        "title": "GeminiEvidenceAssessmentResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2849,7 +3474,8 @@
             "enum": [
               "HIGH",
               "MEDIUM",
-              "LOW"
+              "LOW",
+              "UNKNOWN"
             ],
             "title": "Confidence"
           },
@@ -3119,7 +3745,8 @@
                 "enum": [
                   "HIGH",
                   "MEDIUM",
-                  "LOW"
+                  "LOW",
+                  "UNKNOWN"
                 ]
               },
               {
@@ -3179,6 +3806,326 @@
           "trace_id"
         ],
         "title": "ReadinessResponse"
+      },
+      "ReviewedSourceResponse": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "related_claim_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Claim Ids"
+          },
+          "citation_label": {
+            "type": "string",
+            "title": "Citation Label"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "publisher": {
+            "type": "string",
+            "title": "Publisher",
+            "default": ""
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain",
+            "default": ""
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "reliability": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "title": "Reliability"
+          },
+          "reliability_reason": {
+            "type": "string",
+            "title": "Reliability Reason"
+          },
+          "stance": {
+            "type": "string",
+            "title": "Stance"
+          },
+          "fetched": {
+            "type": "boolean",
+            "title": "Fetched"
+          },
+          "fetch_message": {
+            "type": "string",
+            "title": "Fetch Message"
+          },
+          "relevant_passages": {
+            "items": {
+              "$ref": "#/components/schemas/SourcePassageResponse"
+            },
+            "type": "array",
+            "title": "Relevant Passages"
+          },
+          "qualification": {
+            "type": "string",
+            "enum": [
+              "qualifies",
+              "does_not_qualify"
+            ],
+            "title": "Qualification"
+          },
+          "qualification_explanation": {
+            "type": "string",
+            "title": "Qualification Explanation"
+          },
+          "used_in_explanation": {
+            "type": "boolean",
+            "title": "Used In Explanation",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "citation_label",
+          "url",
+          "source_type",
+          "reliability",
+          "reliability_reason",
+          "stance",
+          "fetched",
+          "fetch_message",
+          "qualification",
+          "qualification_explanation"
+        ],
+        "title": "ReviewedSourceResponse"
+      },
+      "SearchQueryResponse": {
+        "properties": {
+          "query_id": {
+            "type": "string",
+            "title": "Query Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "query_type": {
+            "type": "string",
+            "title": "Query Type"
+          },
+          "result_count": {
+            "type": "integer",
+            "title": "Result Count"
+          },
+          "searched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Searched At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query_id",
+          "claim_id",
+          "query",
+          "query_type",
+          "result_count",
+          "searched_at",
+          "status"
+        ],
+        "title": "SearchQueryResponse"
+      },
+      "SearchSummaryResponse": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": "Gemini searches the live public web with Google Search grounding."
+          },
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/SearchQueryResponse"
+            },
+            "type": "array",
+            "title": "Queries"
+          },
+          "total_queries": {
+            "type": "integer",
+            "title": "Total Queries",
+            "default": 0
+          },
+          "total_results": {
+            "type": "integer",
+            "title": "Total Results",
+            "default": 0
+          },
+          "reviewed_source_count": {
+            "type": "integer",
+            "title": "Reviewed Source Count",
+            "default": 0
+          },
+          "qualifying_source_count": {
+            "type": "integer",
+            "title": "Qualifying Source Count",
+            "default": 0
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SearchSummaryResponse"
+      },
+      "SourcePassageResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "relevance_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relevance Score"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "relevance_score"
+        ],
+        "title": "SourcePassageResponse"
+      },
+      "StyleAssessmentResponse": {
+        "properties": {
+          "signal": {
+            "type": "string",
+            "enum": [
+              "LOW_STYLE_RISK",
+              "HIGH_STYLE_RISK",
+              "UNKNOWN",
+              "ERROR"
+            ],
+            "title": "Signal"
+          },
+          "display_label": {
+            "type": "string",
+            "title": "Display Label"
+          },
+          "display_text": {
+            "type": "string",
+            "title": "Display Text"
+          },
+          "confidence_level": {
+            "type": "string",
+            "enum": [
+              "VERY_HIGH",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "UNKNOWN"
+            ],
+            "title": "Confidence Level"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "display_confidence": {
+            "type": "string",
+            "title": "Display Confidence"
+          },
+          "scope_reliable": {
+            "type": "boolean",
+            "title": "Scope Reliable"
+          },
+          "word_count": {
+            "type": "integer",
+            "title": "Word Count"
+          },
+          "minimum_word_count": {
+            "type": "integer",
+            "title": "Minimum Word Count"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          },
+          "limitation": {
+            "type": "string",
+            "title": "Limitation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "signal",
+          "display_label",
+          "display_text",
+          "confidence_level",
+          "display_confidence",
+          "scope_reliable",
+          "word_count",
+          "minimum_word_count",
+          "limitation"
+        ],
+        "title": "StyleAssessmentResponse"
       },
       "SubmitLiveFrameRequest": {
         "properties": {
@@ -3302,7 +4249,8 @@
                 "enum": [
                   "HIGH",
                   "MEDIUM",
-                  "LOW"
+                  "LOW",
+                  "UNKNOWN"
                 ]
               },
               {

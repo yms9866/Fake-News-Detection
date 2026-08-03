@@ -35,8 +35,48 @@ export class MobileApiClient {
     this["authToken"] = settings["authToken"] || "";
   }
 
+  setAuthToken(token) {
+    this["authToken"] = token ? String(token) : "";
+  }
+
   getHealth() {
     return this.requestJson("/v1/health/live", { method: "GET" });
+  }
+
+  async signIn(payload = {}) {
+    const response = await this.requestJson("/v1/auth/sign-in", {
+      method: "POST",
+      body: JSON.stringify({
+        username: String(payload["username"] || "mobile-reviewer").trim() || "mobile-reviewer",
+        tenant_id: String(payload["tenant_id"] || "local").trim() || "local",
+        client_type: "mobile"
+      }),
+      headers: { "Content-Type": "application/json" }
+    });
+    if (response && response["access_token"]) {
+      this.setAuthToken(response["access_token"]);
+    }
+    return response;
+  }
+
+  restoreSession() {
+    return this.requestJson("/v1/auth/session", { method: "GET" });
+  }
+
+  async refreshSession() {
+    const response = await this.requestJson("/v1/auth/refresh", { method: "POST" });
+    if (response && response["access_token"]) {
+      this.setAuthToken(response["access_token"]);
+    }
+    return response;
+  }
+
+  async signOut() {
+    try {
+      return await this.requestJson("/v1/auth/sign-out", { method: "POST" });
+    } finally {
+      this.setAuthToken("");
+    }
   }
 
   analyzeText(payload) {

@@ -101,6 +101,27 @@ test("backend error preserves stable code and request IDs", async () => {
   });
 });
 
+test("extension auth keeps tokens in background API client headers", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ path: new URL(String(url)).pathname, headers: init.headers });
+    if (String(url).endsWith("/v1/auth/sign-in")) {
+      return jsonResponse({
+        authenticated: true,
+        access_token: "extension-token",
+        user: { user_id: "extension-reviewer" }
+      });
+    }
+    return jsonResponse({ status: "ready" });
+  };
+  const client = new ApiClient({ backendOrigin: "http://127.0.0.1:8000" });
+  await client.signIn({ username: "extension-reviewer" });
+  await client.ready();
+
+  assert.equal(calls[0].path, "/v1/auth/sign-in");
+  assert.equal(calls[1].headers.get("Authorization"), "Bearer extension-token");
+});
+
 test("live browser-tab handoff uses live session endpoints", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

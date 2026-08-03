@@ -68,6 +68,7 @@ class Settings:
     retain_uploaded_artifacts: bool = False
     retain_failed_artifacts: bool = False
     job_event_retention_limit: int = 500
+    persistence_backend: str = "memory"
     database_url: str | None = None
     redis_url: str | None = None
     s3_bucket: str | None = None
@@ -152,6 +153,7 @@ class Settings:
             job_event_retention_limit=int(
                 os.environ.get("JOB_EVENT_RETENTION_LIMIT", "500")
             ),
+            persistence_backend=os.environ.get("PERSISTENCE_BACKEND", "memory").lower(),
             database_url=os.environ.get("DATABASE_URL") or None,
             redis_url=os.environ.get("REDIS_URL") or None,
             s3_bucket=os.environ.get("S3_BUCKET") or None,

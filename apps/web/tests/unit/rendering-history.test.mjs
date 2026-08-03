@@ -61,7 +61,8 @@ test("result UI keeps safe link attributes and style disclaimer", async () => {
   const source = await readFile(new URL("../../src/components/result-view.ts", import.meta.url), "utf8");
   assert.match(source, /target\s*=\s*"_blank"/u);
   assert.match(source, /rel\s*=\s*"noopener noreferrer"/u);
-  assert.match(source, /Writing-style risk does not prove that the claim is false\./u);
+  assert.match(source, /Writing style alone cannot establish whether the claims are true or false\./u);
+  assert.match(source, /Gemini evidence analysis/u);
   assert.match(source, /Mentions the topic/u);
   assert.match(source, /Source not fetched/u);
 });
@@ -70,5 +71,5 @@ test("error UI is accessible and retry is explicit", async () => {
   const source = await readFile(new URL("../../src/components/status-panels.ts", import.meta.url), "utf8");
   assert.match(source, /role", "alert"/u);
   assert.match(source, /Retry request/u);
-  assert.match(source, /Technical details/u);
+  assert.equal(source.includes("Technical details"), false);
 });

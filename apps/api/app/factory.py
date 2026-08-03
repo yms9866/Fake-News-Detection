@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .composition import build_container
 from .errors import register_error_handlers
 from .middleware import RequestContextMiddleware
-from .routes import analyses, forensics, health, jobs, live, media, models
+from .routes import analyses, auth, forensics, health, jobs, live, media, models
 from .state import ApiContainer
 
 DEFAULT_ALLOWED_ORIGINS = [
@@ -16,7 +16,7 @@ DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://localhost:3000",
-    "http://127.0.0.1:5500/"
+    "http://127.0.0.1:5500/",
 ]
 
 
@@ -58,6 +58,7 @@ def create_app(
     app.router.on_shutdown.append(app.state.container.stop)
 
     app.include_router(health.router, prefix="/v1")
+    app.include_router(auth.router, prefix="/v1")
     app.include_router(models.router, prefix="/v1")
     app.include_router(analyses.router, prefix="/v1")
     app.include_router(media.router, prefix="/v1")

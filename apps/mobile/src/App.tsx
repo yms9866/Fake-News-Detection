@@ -59,6 +59,27 @@ function valueOrDash(value) {
   return value === null || value === undefined || value === "" ? "-" : String(value);
 }
 
+function fallbackStyleText(signal) {
+  if (signal === "LOW_STYLE_RISK") {
+    return "The writing style seems similar to real or legitimate news reporting.";
+  }
+  if (signal === "HIGH_STYLE_RISK") {
+    return "The writing style seems similar to fake, misleading, or fabricated content.";
+  }
+  return "The writing-style assessment is unavailable.";
+}
+
+function fallbackStyleConfidence(confidence) {
+  if (confidence === null || confidence === undefined) {
+    return "N/A";
+  }
+  if (confidence >= 0.9995) {
+    return ">99.9%";
+  }
+  const bounded = Math.max(0, Math.min(Number(confidence), 0.999));
+  return `${(bounded * 100).toFixed(1)}%`;
+}
+
 function verdictTone(verdict) {
   const normalized = String(verdict || "").toUpperCase();
   if (normalized === "REAL") {
@@ -104,7 +125,12 @@ function ResultPanel({ result }) {
   const evidence = result.verification && Array.isArray(result.verification.evidence)
     ? result.verification.evidence.slice(0, 3)
     : [];
+  const claims = Array.isArray(result.claims) ? result.claims.slice(0, 3) : [];
+  const reviewedSources = Array.isArray(result.sources) ? result.sources.slice(0, 3) : [];
   const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const styleAssessment = result.style_assessment || {};
+  const styleText = styleAssessment.display_text || fallbackStyleText(result.style_signal);
+  const styleConfidence = styleAssessment.display_confidence || fallbackStyleConfidence(result.style_confidence);
 
   return h(
     View,
@@ -118,12 +144,29 @@ function ResultPanel({ result }) {
       h(Text, { style: styles.metricValue }, valueOrDash(result.confidence))
     ),
     h(View, { style: styles.metricRow },
-      h(Text, { style: styles.metricLabel }, "Style"),
-      h(Text, { style: styles.metricValue }, valueOrDash(result.style_signal))
+      h(Text, { style: styles.metricLabel }, "Writing style"),
+      h(Text, { style: styles.metricValue }, styleConfidence)
+    ),
+    h(Text, { style: styles.meta }, valueOrDash(styleText)),
+    h(View, { style: styles.metricRow },
+      h(Text, { style: styles.metricLabel }, "Claims checked"),
+      h(Text, { style: styles.metricValue }, String(Array.isArray(result.claims) ? result.claims.length : 0))
+    ),
+    h(View, { style: styles.metricRow },
+      h(Text, { style: styles.metricLabel }, "Reviewed sources"),
+      h(Text, { style: styles.metricValue }, String(Array.isArray(result.sources) ? result.sources.length : evidence.length))
     ),
     h(Text, { style: styles.reason }, valueOrDash(result.reason)),
-    result.request_id ? h(Text, { style: styles.meta }, `Request ${result.request_id}`) : null,
-    evidence.length > 0 ? h(View, { style: styles.evidenceList },
+    claims.length > 0 ? h(View, { style: styles.evidenceList },
+      claims.map((claim, index) => h(Text, { key: `${claim.claim_id || index}`, style: styles.evidenceItem },
+        `${index + 1}. ${valueOrDash(claim.verification_status)} - ${valueOrDash(claim.claim_text)}`
+      ))
+    ) : null,
+    reviewedSources.length > 0 ? h(View, { style: styles.evidenceList },
+      reviewedSources.map((item, index) => h(Text, { key: `${item.source_id || item.url || index}`, style: styles.evidenceItem },
+        `${index + 1}. ${valueOrDash(item.title || item.url)}`
+      ))
+    ) : evidence.length > 0 ? h(View, { style: styles.evidenceList },
       evidence.map((item, index) => h(Text, { key: `${item.url || item.title || index}`, style: styles.evidenceItem },
         `${index + 1}. ${valueOrDash(item.title || item.url)}`
       ))
@@ -142,6 +185,9 @@ export default function App() {
   const [deepCheck, setDeepCheck] = useState(true);
   const [maxLength, setMaxLength] = useState("512");
   const [backendStatus, setBackendStatus] = useState("Not checked");
+  const [authUsername, setAuthUsername] = useState("mobile-reviewer");
+  const [authStatus, setAuthStatus] = useState("Not signed in");
+  const [authToken, setAuthToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -161,6 +207,32 @@ export default function App() {
     }
   }
 
+  async function signIn() {
+    setError("");
+    try {
+      const client = new MobileApiClient({ apiUrl: origin, authToken });
+      const session = await client.signIn({ username: authUsername });
+      setAuthToken(session && session.access_token ? session.access_token : "");
+      setAuthStatus(session && session.user ? `Signed in as ${session.user.user_id}` : "Signed in");
+    } catch (caught) {
+      setAuthStatus("Not signed in");
+      setError(caught instanceof Error ? caught.message : "Sign in failed.");
+    }
+  }
+
+  async function signOut() {
+    setError("");
+    try {
+      const client = new MobileApiClient({ apiUrl: origin, authToken });
+      await client.signOut();
+    } catch {
+      // Local cleanup still matters if the backend is temporarily unavailable.
+    } finally {
+      setAuthToken("");
+      setAuthStatus("Signed out");
+    }
+  }
+
   async function runAnalysis() {
     const trimmed = String(activeInput || "").trim();
     if (!trimmed) {
@@ -177,7 +249,7 @@ export default function App() {
       : { url: trimmed, deep_check: deepCheck, max_length: Number(maxLength) || 512 };
 
     try {
-      const client = new MobileApiClient({ apiUrl: origin });
+      const client = new MobileApiClient({ apiUrl: origin, authToken });
       const payload = mode === "text"
         ? await client.analyzeText(body)
         : await client.analyzeUrl(body);
@@ -209,6 +281,23 @@ export default function App() {
           value: backendOrigin
         }),
         h(Button, { label: "Check Backend", onPress: checkBackend, secondary: true })
+      ),
+      h(View, { style: styles.panel },
+        h(FieldLabel, null, "Reviewer"),
+        h(TextInput, {
+          autoCapitalize: "none",
+          autoCorrect: false,
+          onChangeText: setAuthUsername,
+          placeholder: "mobile-reviewer",
+          placeholderTextColor: "#7a8178",
+          style: styles.input,
+          value: authUsername
+        }),
+        h(Text, { style: styles.meta }, authStatus),
+        h(View, { style: styles.actionsRow },
+          h(Button, { label: "Sign in", onPress: signIn, secondary: true }),
+          h(Button, { label: "Sign out", onPress: signOut, secondary: true })
+        )
       ),
       h(View, { style: styles.segment },
         h(Pressable, {
@@ -380,6 +469,11 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 12,
     justifyContent: "space-between"
+  },
+  actionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
   },
   switchRow: {
     alignItems: "center",

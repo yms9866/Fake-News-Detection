@@ -20,7 +20,8 @@ const DEFAULT_SETTINGS = {
   defaultDeepCheck: false,
   defaultMaxLength: 512,
   requestTimeoutMs: 60000,
-  startupTimeoutMs: 30000
+  startupTimeoutMs: 30000,
+  authToken: ""
 };
 
 export class DesktopInitializationError extends Error {
@@ -67,13 +68,10 @@ export function renderDesktopInitializationError(root, error) {
   title.textContent = "Desktop runtime could not start";
   const message = document.createElement("p");
   message.textContent = error && error.message ? error.message : "The desktop bridge is unavailable.";
-  const details = document.createElement("details");
-  const summary = document.createElement("summary");
-  summary.textContent = "Technical details";
-  const pre = document.createElement("pre");
-  pre.textContent = `${error && error.code ? error.code : "DESKTOP_INITIALIZATION_ERROR"}\n${message.textContent}`;
-  details.append(summary, pre);
-  card.append(title, message, details);
+  const code = document.createElement("p");
+  code.className = "muted";
+  code.textContent = `Issue code: ${error && error.code ? error.code : "DESKTOP_INITIALIZATION_ERROR"}`;
+  card.append(title, message, code);
   panel.append(card);
   root.append(panel);
 }
@@ -92,6 +90,7 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
     activeJob: null,
     liveSession: null,
     latestResult: null,
+    auth: null,
     loading: false,
     error: null
   };
@@ -237,6 +236,27 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         client.configure(state.settings);
       });
     },
+    async signIn(payload) {
+      await run(async () => {
+        const session = await client.signIn(payload);
+        state.auth = session;
+        state.settings = {
+          ...state.settings,
+          authToken: session && session.access_token ? session.access_token : ""
+        };
+        await settingsStore.save(state.settings);
+        client.configure(state.settings);
+      });
+    },
+    async signOut() {
+      await run(async () => {
+        await client.signOut();
+        state.auth = null;
+        state.settings = { ...state.settings, authToken: "" };
+        await settingsStore.save(state.settings);
+        client.configure(state.settings);
+      });
+    },
     async clearHistory() {
       await run(async () => {
         state.history = await historyStore.clear();
@@ -249,6 +269,8 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         state.latestResult = null;
         state.activeJob = null;
         state.liveSession = null;
+        state.auth = null;
+        client.setAuthToken(null);
       });
     }
   };
@@ -299,6 +321,16 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
     await run(async () => {
       state.settings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get()) };
       client.configure(state.settings);
+      if (state.settings.authToken) {
+        try {
+          state.auth = await client.restoreSession();
+        } catch {
+          state.auth = null;
+          state.settings = { ...state.settings, authToken: "" };
+          await settingsStore.save(state.settings);
+          client.configure(state.settings);
+        }
+      }
       state.history = await historyStore.list();
       await actions.refreshDiagnostics();
     });
@@ -337,9 +369,15 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
       alert.setAttribute("role", "alert");
       alert.append(el("h2", errorTitle(state.error.code)));
       alert.append(el("p", state.error.message));
-      const details = document.createElement("details");
-      details.append(el("summary", "Technical details"), el("pre", JSON.stringify(state.error, null, 2)));
-      alert.append(details);
+      alert.append(el("p", `Issue code: ${state.error.code}`, "muted"));
+      const validationItems = validationMessages(state.error);
+      if (validationItems.length > 0) {
+        const list = el("ul", null, "warnings");
+        for (const item of validationItems) {
+          list.append(el("li", item));
+        }
+        alert.append(list);
+      }
       layout.append(alert);
     }
     if (state.loading) {
@@ -399,4 +437,16 @@ function errorTitle(code) {
     return "Backend request timed out";
   }
   return "Desktop operation failed";
+}
+
+function validationMessages(error) {
+  if (!error || !Array.isArray(error.validationDetails)) {
+    return [];
+  }
+  return error.validationDetails
+    .map((detail) => {
+      const field = Array.isArray(detail.loc) && detail.loc.length > 0 ? ` (${detail.loc.join(".")})` : "";
+      return `${detail.msg || "Please check this field."}${field}`;
+    })
+    .filter(Boolean);
 }

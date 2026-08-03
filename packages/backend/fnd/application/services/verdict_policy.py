@@ -37,7 +37,7 @@ def _style_signal_text(style: StyleAnalysis | None) -> str:
 def _is_eligible_evidence(item: EvidenceItem) -> bool:
     if not item.fetched:
         return False
-    if item.reliability == EvidenceQuality.LOW:
+    if item.reliability not in {EvidenceQuality.HIGH, EvidenceQuality.MEDIUM}:
         return False
     if item.is_original_claim:
         return False
@@ -65,6 +65,21 @@ def _best_quality(items: list[EvidenceItem]) -> EvidenceQuality:
     if any(item.reliability == EvidenceQuality.MEDIUM for item in items):
         return EvidenceQuality.MEDIUM
     return EvidenceQuality.LOW
+
+
+def _gemini_grounded_items_for(
+    evidence: EvidenceAnalysis,
+    stance: EvidenceStance,
+) -> list[EvidenceItem]:
+    return [
+        item
+        for item in evidence.items
+        if item.fetched
+        and item.direct
+        and item.reliability in {EvidenceQuality.HIGH, EvidenceQuality.MEDIUM}
+        and item.stance == stance
+        and bool(item.relevant_passages)
+    ]
 
 
 @dataclass(frozen=True)
@@ -115,7 +130,14 @@ class VerdictPolicy:
         official_contradictions = [
             item
             for item in contradiction_items
-            if item.source_type == SourceType.OFFICIAL
+            if item.source_type
+            in {
+                SourceType.OFFICIAL,
+                SourceType.OFFICIAL_DOCUMENT,
+                SourceType.GOVERNMENT,
+                SourceType.INTERNATIONAL_ORGANIZATION,
+                SourceType.PRIMARY_SOURCE,
+            }
             and item.reliability == EvidenceQuality.HIGH
             and item.direct
         ]
@@ -153,6 +175,10 @@ class VerdictPolicy:
                 ),
                 policy_version=self.version,
             )
+
+        grounded_decision = self._gemini_grounded_decision(evidence)
+        if grounded_decision is not None:
+            return grounded_decision
 
         return self._insufficient_evidence_decision(style, style_signal)
 
@@ -242,3 +268,58 @@ class VerdictPolicy:
             "Factual verification could not be completed. The local style signal is not "
             "enough to verify factual truth."
         )
+
+    def _gemini_grounded_decision(
+        self,
+        evidence: EvidenceAnalysis,
+    ) -> VerdictDecision | None:
+        if evidence.provider_name != "gemini_google_search":
+            return None
+        if not evidence.grounding_used:
+            return None
+        if evidence.verdict not in {FinalVerdict.REAL, FinalVerdict.FAKE}:
+            return None
+        if evidence.confidence not in {EvidenceQuality.HIGH, EvidenceQuality.MEDIUM}:
+            return None
+        if evidence.evidence_quality not in {
+            EvidenceQuality.HIGH,
+            EvidenceQuality.MEDIUM,
+        }:
+            return None
+
+        support = _gemini_grounded_items_for(evidence, EvidenceStance.SUPPORTS)
+        contradict = _gemini_grounded_items_for(evidence, EvidenceStance.CONTRADICTS)
+        if support and contradict:
+            return VerdictDecision(
+                verdict=FinalVerdict.UNVERIFIED,
+                confidence=EvidenceQuality.LOW,
+                reason=(
+                    "Gemini Google Search grounding returned conflicting cited "
+                    "evidence, so the final policy did not choose a definitive verdict."
+                ),
+                policy_version=self.version,
+            )
+
+        if evidence.verdict == FinalVerdict.REAL and len(support) >= 2:
+            return VerdictDecision(
+                verdict=FinalVerdict.REAL,
+                confidence=evidence.confidence,
+                reason=(
+                    "Gemini Google Search grounding returned multiple direct cited "
+                    "sources supporting the claim."
+                ),
+                policy_version=self.version,
+            )
+
+        if evidence.verdict == FinalVerdict.FAKE and len(contradict) >= 2:
+            return VerdictDecision(
+                verdict=FinalVerdict.FAKE,
+                confidence=evidence.confidence,
+                reason=(
+                    "Gemini Google Search grounding returned multiple direct cited "
+                    "sources contradicting the claim."
+                ),
+                policy_version=self.version,
+            )
+
+        return None

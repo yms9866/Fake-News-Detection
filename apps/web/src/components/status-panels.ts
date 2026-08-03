@@ -25,11 +25,14 @@ export function renderErrorPanel(error, retryAction = null) {
     actions.append(button("Retry request", retryAction));
   }
   panel.append(actions);
-  const details = document.createElement("details");
-  details.append(el("summary", "Technical details"));
-  const pre = el("pre", JSON.stringify(error || {}, null, 2));
-  details.append(pre);
-  panel.append(details);
+  const validationItems = validationMessages(error);
+  if (validationItems.length > 0) {
+    const list = el("ul", null, "warnings");
+    for (const item of validationItems) {
+      list.append(el("li", item));
+    }
+    panel.append(list);
+  }
   return panel;
 }
 
@@ -81,6 +84,18 @@ function isRetryable(error) {
     "WEB_CORS_OR_NETWORK_FAILURE",
     "WEB_REQUEST_TIMEOUT"
   ].includes(error.code);
+}
+
+function validationMessages(error) {
+  if (!error || !Array.isArray(error.validationDetails)) {
+    return [];
+  }
+  return error.validationDetails
+    .map((detail) => {
+      const field = Array.isArray(detail.loc) && detail.loc.length > 0 ? ` (${detail.loc.join(".")})` : "";
+      return `${detail.msg || "Please check this field."}${field}`;
+    })
+    .filter(Boolean);
 }
 
 function connectionLabel(status) {

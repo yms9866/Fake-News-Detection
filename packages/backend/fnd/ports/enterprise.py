@@ -8,6 +8,7 @@ from packages.backend.fnd.domain.enterprise import (
     AuditEvent,
     DeviceRegistration,
     RetentionPolicy,
+    SessionToken,
     TenantContext,
     UserSession,
 )
@@ -61,6 +62,12 @@ class SessionRepository(Protocol):
     def save(self, session: UserSession) -> None: ...
 
     def get(self, session_id: str) -> UserSession | None: ...
+
+
+class SessionTokenRepository(Protocol):
+    def save(self, token: SessionToken) -> None: ...
+
+    def get(self, token_hash: str) -> SessionToken | None: ...
 
 
 class RetentionPolicyRepository(Protocol):

@@ -13,6 +13,8 @@ export const MESSAGE_TYPES = {
   extractArticle: "EXTRACT_ARTICLE",
   extractPage: "EXTRACT_PAGE",
   testConnection: "TEST_CONNECTION",
+  signIn: "SIGN_IN",
+  signOut: "SIGN_OUT",
   saveSettings: "SAVE_SETTINGS",
   clearState: "CLEAR_STATE",
   settingsUpdated: "SETTINGS_UPDATED"

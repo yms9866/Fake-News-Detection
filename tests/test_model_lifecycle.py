@@ -6,7 +6,9 @@ from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from packages.backend.fnd.adapters.models import modernbert as modernbert_module
 from packages.backend.fnd.adapters.models.modernbert import ModernBertStyleModel
+from packages.backend.fnd.domain.enums import StyleRiskSignal
 
 
 class FakeModel:
@@ -18,6 +20,47 @@ class FakeModel:
 
 
 class ModernBertLifecycleTests(unittest.TestCase):
+    def test_model_config_label_mapping_is_validated(self) -> None:
+        with self.subTest("id2label"):
+            mapping = modernbert_module._label_strings_to_signal_map(
+                {0: "fake-like", 1: "real-like"}
+            )
+            self.assertEqual(
+                mapping,
+                {
+                    0: StyleRiskSignal.HIGH,
+                    1: StyleRiskSignal.LOW,
+                },
+            )
+
+        with self.subTest("unrecognized"):
+            self.assertIsNone(
+                modernbert_module._label_strings_to_signal_map(
+                    {0: "LABEL_0", 1: "LABEL_1"}
+                )
+            )
+
+    def test_training_source_mapping_is_used_as_safe_fallback(self) -> None:
+        mapping = modernbert_module.resolve_style_label_mapping(
+            model=None,
+            model_path=Path("models/modernbert_fake_news_512"),
+        )
+
+        self.assertEqual(mapping[0], StyleRiskSignal.HIGH)
+        self.assertEqual(mapping[1], StyleRiskSignal.LOW)
+
+    def test_unverified_label_mapping_fails_safely(self) -> None:
+        with patch.object(
+            modernbert_module,
+            "_mapping_from_training_source",
+            return_value=None,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "MODEL_LABEL_MAPPING_UNVERIFIED"):
+                modernbert_module.resolve_style_label_mapping(
+                    model=None,
+                    model_path=Path("missing-model"),
+                )
+
     def test_load_once_initializes_model_only_once(self) -> None:
         calls = {"load_model": 0}
 

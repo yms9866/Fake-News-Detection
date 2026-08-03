@@ -17,6 +17,16 @@ def list_models(
     request: Request,
     registry: ModelRegistry = Depends(get_model_registry),
 ) -> ModelsResponse:
+    label_map = {0: "UNKNOWN", 1: "UNKNOWN"}
+    style_model = registry.style_model
+    if hasattr(style_model, "label_map"):
+        try:
+            label_map = {
+                int(key): str(value) for key, value in style_model.label_map().items()
+            }
+        except Exception:
+            label_map = {}
+
     return ModelsResponse(
         models=[
             ModelInfo(
@@ -24,7 +34,7 @@ def list_models(
                 path=str(registry.model_path),
                 exists=registry.model_exists(),
                 loaded=registry.is_loaded(),
-                label_map={0: "HIGH_STYLE_RISK", 1: "LOW_STYLE_RISK"},
+                label_map=label_map,
                 max_length=registry.max_length,
             )
         ],

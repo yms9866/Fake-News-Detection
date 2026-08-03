@@ -6,7 +6,9 @@ from packages.backend.fnd.application.services.verdict_policy import VerdictPoli
 from packages.backend.fnd.domain.entities import (
     EvidenceAnalysis,
     EvidenceItem,
+    RelevantPassage,
     StyleAnalysis,
+    display_confidence,
 )
 from packages.backend.fnd.domain.enums import (
     EvidenceQuality,
@@ -61,6 +63,7 @@ def item(
     matches_claim: bool = True,
     outdated: bool = False,
     page_text: str = "",
+    relevant_passages: tuple[RelevantPassage, ...] = (),
 ) -> EvidenceItem:
     return EvidenceItem(
         url=url,
@@ -78,6 +81,7 @@ def item(
         matches_claim=matches_claim,
         outdated=outdated,
         page_text=page_text,
+        relevant_passages=relevant_passages,
     )
 
 
@@ -467,6 +471,83 @@ class VerdictPolicyTests(unittest.TestCase):
         decision = self.policy.decide(style(), provider_claim)
 
         self.assertEqual(decision.verdict, FinalVerdict.UNVERIFIED)
+
+    def test_grounded_gemini_support_can_drive_final_real_verdict(self) -> None:
+        cited_passage = RelevantPassage(text="Direct cited support.")
+        provider_claim = EvidenceAnalysis(
+            provider_name="gemini_google_search",
+            verdict=FinalVerdict.REAL,
+            confidence=EvidenceQuality.HIGH,
+            evidence_quality=EvidenceQuality.HIGH,
+            grounding_used=True,
+            items=(
+                item(
+                    url="https://vertexaisearch.cloud.google.com/redirect/1",
+                    stance=EvidenceStance.SUPPORTS,
+                    group="vertexaisearch.cloud.google.com",
+                    relevant_passages=(cited_passage,),
+                ),
+                item(
+                    url="https://vertexaisearch.cloud.google.com/redirect/2",
+                    stance=EvidenceStance.SUPPORTS,
+                    group="vertexaisearch.cloud.google.com",
+                    relevant_passages=(cited_passage,),
+                ),
+            ),
+        )
+
+        decision = self.policy.decide(style(), provider_claim)
+
+        self.assertEqual(decision.verdict, FinalVerdict.REAL)
+        self.assertEqual(decision.confidence, EvidenceQuality.HIGH)
+
+    def test_grounded_gemini_contradiction_can_drive_final_fake_verdict(self) -> None:
+        cited_passage = RelevantPassage(text="Direct cited contradiction.")
+        provider_claim = EvidenceAnalysis(
+            provider_name="gemini_google_search",
+            verdict=FinalVerdict.FAKE,
+            confidence=EvidenceQuality.HIGH,
+            evidence_quality=EvidenceQuality.HIGH,
+            grounding_used=True,
+            items=(
+                item(
+                    url="https://vertexaisearch.cloud.google.com/redirect/1",
+                    stance=EvidenceStance.CONTRADICTS,
+                    group="vertexaisearch.cloud.google.com",
+                    relevant_passages=(cited_passage,),
+                ),
+                item(
+                    url="https://vertexaisearch.cloud.google.com/redirect/2",
+                    stance=EvidenceStance.CONTRADICTS,
+                    group="vertexaisearch.cloud.google.com",
+                    relevant_passages=(cited_passage,),
+                ),
+            ),
+        )
+
+        decision = self.policy.decide(style(), provider_claim)
+
+        self.assertEqual(decision.verdict, FinalVerdict.FAKE)
+        self.assertEqual(decision.confidence, EvidenceQuality.HIGH)
+
+    def test_ungrounded_gemini_verdict_is_not_final(self) -> None:
+        provider_claim = EvidenceAnalysis(
+            provider_name="gemini_google_search",
+            verdict=FinalVerdict.FAKE,
+            confidence=EvidenceQuality.HIGH,
+            evidence_quality=EvidenceQuality.HIGH,
+            grounding_used=False,
+            items=(),
+        )
+
+        decision = self.policy.decide(style(), provider_claim)
+
+        self.assertEqual(decision.verdict, FinalVerdict.UNVERIFIED)
+
+    def test_style_confidence_display_never_claims_absolute_certainty(self) -> None:
+        self.assertEqual(display_confidence(0.99996), ">99.9%")
+        self.assertEqual(display_confidence(1.0), ">99.9%")
+        self.assertEqual(display_confidence(0.8731), "87.3%")
 
 
 if __name__ == "__main__":

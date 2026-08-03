@@ -69,3 +69,25 @@ test("mobile cancellation calls job cancel endpoint", async () => {
   });
   assert.equal(path, "/v1/jobs/job/cancel");
 });
+
+test("mobile auth signs in and attaches bearer token", async () => {
+  const calls = [];
+  await withFetch(async (url, init = {}) => {
+    calls.push({ path: new URL(String(url)).pathname, headers: init.headers || {} });
+    if (String(url).endsWith("/v1/auth/sign-in")) {
+      return response({
+        authenticated: true,
+        access_token: "mobile-token",
+        user: { user_id: "mobile-reviewer" }
+      });
+    }
+    return response({ status: "live" });
+  }, async () => {
+    const client = new MobileApiClient();
+    await client.signIn({ username: "mobile-reviewer" });
+    await client.getHealth();
+  });
+
+  assert.equal(calls[0].path, "/v1/auth/sign-in");
+  assert.equal(calls[1].headers.Authorization, "Bearer mobile-token");
+});
