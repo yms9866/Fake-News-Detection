@@ -61,6 +61,14 @@ class ModernBertLifecycleTests(unittest.TestCase):
                     model_path=Path("missing-model"),
                 )
 
+    def test_style_inference_uses_training_cleaning(self) -> None:
+        cleaned = modernbert_module._prepare_style_model_input(
+            "WASHINGTON (Reuters) - <p>Claim body</p> https://example.com "
+            "subscribe now"
+        )
+
+        self.assertEqual(cleaned, "Claim body")
+
     def test_load_once_initializes_model_only_once(self) -> None:
         calls = {"load_model": 0}
 

@@ -388,6 +388,8 @@ def _final_assessment(result: AnalysisResult) -> FinalAssessmentResponse:
 
 
 def _friendly_fetch_message(item: object) -> str:
+    if getattr(item, "search_provider", "") == "gemini_google_search":
+        return "Gemini returned this source through Google Search grounding."
     if getattr(item, "fetched", False):
         return "The source page was reviewed."
     return "A search result appears relevant, but the source page could not be fully reviewed."
@@ -395,6 +397,8 @@ def _friendly_fetch_message(item: object) -> str:
 
 def _qualification_explanation(item: object) -> str:
     if getattr(item, "qualification_status", "") == "QUALIFIED":
+        if getattr(item, "search_provider", "") == "gemini_google_search":
+            return "Gemini grounding cited this source directly and it counted as independent evidence."
         return "This reviewed source was relevant, reliable enough, and counted as independent evidence."
     reasons = set(getattr(item, "rejection_reasons", ()) or ())
     messages = {

@@ -495,6 +495,42 @@ class ApiSlice2Tests(unittest.TestCase):
         self.assertFalse(verification["evidence"][0]["used_in_explanation"])
         self.assertEqual(verification["evidence"][1]["url"], "")
 
+    def test_gemini_grounded_sources_have_human_fetch_messages(self) -> None:
+        self.workflow.next_result = self._analysis_with_evidence(
+            items=(
+                EvidenceItem(
+                    source_id="source-1",
+                    url="https://vertexaisearch.cloud.google.com/grounding-api-redirect/example",
+                    title="reuters.com",
+                    publisher="reuters.com",
+                    source_type=SourceType.WIRE_SERVICE,
+                    stance=EvidenceStance.CONTRADICTS,
+                    reliability=EvidenceQuality.HIGH,
+                    fetched=True,
+                    search_provider="gemini_google_search",
+                    qualification_status="QUALIFIED",
+                    used_in_explanation=True,
+                ),
+            ),
+            provider_verdict=FinalVerdict.FAKE,
+            provider_quality=EvidenceQuality.HIGH,
+            final_verdict=FinalVerdict.FAKE,
+            final_quality=EvidenceQuality.HIGH,
+        )
+
+        response = self.client.post(
+            "/v1/analyses/text",
+            json={"text": "Gemini grounded source serializer regression claim."},
+        )
+
+        source = response.json()["sources"][0]
+        self.assertEqual(source["publisher"], "reuters.com")
+        self.assertEqual(
+            source["fetch_message"],
+            "Gemini returned this source through Google Search grounding.",
+        )
+        self.assertIn("Gemini grounding cited", source["qualification_explanation"])
+
     def test_duplicate_qualifying_sources_count_once(self) -> None:
         self.workflow.next_result = self._analysis_with_evidence(
             items=(
@@ -753,7 +789,9 @@ class ApiSlice2Tests(unittest.TestCase):
             ),
             evidence=evidence,
             search_context=SearchContext(
-                query="claim query", raw_context="search context"
+                query="claim query",
+                raw_context="search context",
+                reviewed_sources=items,
             ),
             final=VerdictDecision(
                 verdict=final_verdict,

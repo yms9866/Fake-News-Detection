@@ -3,8 +3,13 @@ import { button, div, el } from "./dom.js";
 export function renderLoadingState(message = "Working") {
   const panel = div("status-panel loading-state");
   panel.setAttribute("aria-live", "polite");
-  panel.append(el("strong", message));
-  panel.append(el("p", "The request is in progress. You can continue using the app when it completes.", "muted"));
+  const spinner = document.createElement("div");
+  spinner.className = "loading-spinner";
+  const content = document.createElement("div");
+  content.className = "loading-content";
+  content.append(el("strong", message));
+  content.append(el("p", "The request is in progress. You can continue using the app when it completes.", "muted"));
+  panel.append(spinner, content);
   return panel;
 }
 

@@ -57,7 +57,7 @@ export function renderResultOverlay(shadowRoot, summary) {
   title.textContent = "Analysis result";
   wrapper.append(title, close);
   wrapper.append(
-    metric("Writing style", summary.styleConfidence || "N/A"),
+    metric("Style signal strength", summary.styleConfidence || "N/A"),
     metric("Style assessment", summary.styleText || fallbackStyleText(summary.styleSignal)),
     metric("Claims checked", String(summary.claimCount || 0)),
     metric("Gemini evidence analysis", humanVerification(summary.verificationStatus)),

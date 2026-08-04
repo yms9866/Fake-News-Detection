@@ -134,6 +134,27 @@ class GeminiGroundedSearchEvidenceProviderTests(unittest.TestCase):
         self.assertEqual(evidence.items[0].qualification_status, "QUALIFIED")
         self.assertIn("google_search", calls[0]["payload"]["tools"][0])
 
+    def test_google_grounding_redirect_uses_source_title_as_publisher(self) -> None:
+        response = _grounded_response()
+        candidate = response["candidates"][0]
+        grounding = candidate["groundingMetadata"]
+        grounding["groundingChunks"][0]["web"] = {
+            "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/example",
+            "title": "reuters.com",
+        }
+        provider = GeminiGroundedSearchEvidenceProvider(
+            api_key="test-key",
+            transport=lambda *_: response,
+        )
+
+        context = provider.search("Example claim", max_results=6)
+
+        self.assertEqual(context.reviewed_sources[0].publisher, "reuters.com")
+        self.assertIn(
+            "vertexaisearch.cloud.google.com",
+            context.reviewed_sources[0].url,
+        )
+
     def test_grounded_sources_can_drive_existing_final_policy(self) -> None:
         provider = GeminiGroundedSearchEvidenceProvider(
             api_key="test-key",

@@ -1,5 +1,8 @@
 import { div, el } from "./dom.js";
 import { evidenceLinkDescriptor, textOnly } from "./safe-rendering.js";
+import { renderVerdictBanner } from "./verdict-banner.js";
+import { renderCollapsibleSection } from "./collapsible-section.js";
+import { renderSourceChip, renderSourceDetail } from "./source-chip.js";
 
 export function renderResultView(result) {
   const wrapper = div("result-view");
@@ -8,19 +11,20 @@ export function renderResultView(result) {
     return wrapper;
   }
 
-  const summary = div("result-summary");
-  summary.append(el("p", "Final verdict", "eyebrow"));
-  summary.append(el("h2", textOnly(result.final_verdict, "UNVERIFIED")));
-  summary.append(el("p", `Confidence: ${textOnly(result.confidence, "LOW")}`, "confidence-line"));
-  summary.append(el("p", textOnly(result.reason, "No reason returned."), "reason"));
-  wrapper.append(summary);
+  // Verdict hero section (always visible)
+  wrapper.append(renderVerdictBanner(result));
 
-  wrapper.append(renderStyleSignal(result));
-  wrapper.append(renderClaims(result.claims));
-  wrapper.append(renderSearchSummary(result.search_summary));
-  wrapper.append(renderEvidenceSources(result));
-  wrapper.append(renderGeminiEvidence(result.gemini_evidence || result.verification));
-  wrapper.append(renderWarnings(result.warnings));
+  // Methodology section (collapsible)
+  const methodologyContent = div("methodology-content");
+  methodologyContent.append(renderStyleSignal(result));
+  methodologyContent.append(renderClaims(result.claims));
+  methodologyContent.append(renderSearchSummary(result.search_summary));
+  methodologyContent.append(renderEvidenceSources(result));
+  methodologyContent.append(renderGeminiEvidence(result.gemini_evidence || result.verification));
+  methodologyContent.append(renderWarnings(result.warnings));
+  
+  wrapper.append(renderCollapsibleSection("How we checked this", methodologyContent, true));
+  
   return wrapper;
 }
 
@@ -113,11 +117,39 @@ function renderEvidenceSources(result) {
     section.append(el("p", "No structured source records were returned.", "muted"));
     return section;
   }
-  const list = div("source-grid");
-  for (const item of sources) {
-    list.append(renderSourceCard(item));
+  
+  // Group sources by stance
+  const grouped = sources.reduce((acc, item) => {
+    const descriptor = evidenceLinkDescriptor(item);
+    const stance = descriptor.stance || "unknown";
+    if (!acc[stance]) acc[stance] = [];
+    acc[stance].push({ item, descriptor });
+    return acc;
+  }, {});
+  
+  // Render grouped sources
+  for (const [stance, items] of Object.entries(grouped)) {
+    const groupHeader = el("h4", `${items.length} ${stanceLabel(stance).toLowerCase()}`);
+    section.append(groupHeader);
+    
+    const chipList = div("source-chip-list");
+    for (const { item, descriptor } of items) {
+      const chip = renderSourceChip(item, (clickedItem, clickedDescriptor) => {
+        // Expand to show detail
+        const existingDetail = chipList.querySelector(`.source-detail[data-id="${clickedItem.citation_label}"]`);
+        if (existingDetail) {
+          existingDetail.remove();
+        } else {
+          const detail = renderSourceDetail(clickedItem, clickedDescriptor);
+          detail.dataset.id = clickedItem.citation_label;
+          chip.after(detail);
+        }
+      });
+      chipList.append(chip);
+    }
+    section.append(chipList);
   }
-  section.append(list);
+  
   return section;
 }
 
@@ -161,7 +193,7 @@ function renderStyleSignal(result) {
   const limitation = assessment.limitation || "This assessment evaluates writing patterns only. Writing style alone cannot establish whether the claims are true or false.";
   section.append(el("h3", "Writing-style assessment"));
   section.append(el("p", textOnly(displayText, "The writing-style assessment is unavailable.")));
-  section.append(el("p", `Style confidence: ${textOnly(displayConfidence, "N/A")}`, "confidence-line"));
+  section.append(el("p", `Style signal strength: ${textOnly(displayConfidence, "N/A")}`, "confidence-line"));
   section.append(el("p", textOnly(limitation), "muted"));
   if (assessment.warning || result.style_warning) {
     section.append(el("p", textOnly(assessment.warning || result.style_warning), "muted"));

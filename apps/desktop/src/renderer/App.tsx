@@ -363,6 +363,8 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
       navButton("Diagnostics", "diagnostics")
     );
     layout.append(nav);
+    const content = document.createElement("div");
+    content.className = "content-shell";
     if (state.error) {
       const alert = document.createElement("section");
       alert.className = "alert error-panel";
@@ -378,12 +380,13 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         }
         alert.append(list);
       }
-      layout.append(alert);
+      content.append(alert);
     }
     if (state.loading) {
-      layout.append(renderLoadingPanel());
+      content.append(renderLoadingPanel());
     }
-    layout.append(renderCurrentScreen());
+    content.append(renderCurrentScreen());
+    layout.append(content);
     root.append(layout);
   }
 

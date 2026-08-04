@@ -117,7 +117,7 @@ function renderActive(active) {
 function renderLatest(summary) {
   const card = div("result");
   card.append(
-    metric("Writing style", summary.styleConfidence || "N/A"),
+    metric("Style signal strength", summary.styleConfidence || "N/A"),
     metric("Style assessment", summary.styleText || fallbackStyleText(summary.styleSignal)),
     metric("Claims checked", String(summary.claimCount || 0)),
     metric("Gemini evidence analysis", summary.verificationStatus || "not_run"),

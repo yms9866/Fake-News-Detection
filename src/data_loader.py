@@ -11,6 +11,7 @@ from typing import Literal
 
 from datasets import Dataset, DatasetDict, load_dataset
 
+from src import text_cleaning
 
 DatasetName = Literal["local_master"]
 
@@ -23,7 +24,7 @@ REAL_LABEL = 1
 DEFAULT_RANDOM_SEED = 42
 
 
-def clean_news_text(text: object) -> str:
+def _legacy_clean_news_text(text: object) -> str:
     """
     Clean source and formatting artifacts that could cause leakage.
 
@@ -70,8 +71,7 @@ def clean_news_text(text: object) -> str:
     # LONDON (Reuters) —
     # New York (Reuters) -
     text = re.sub(
-        r"^\s*[A-Za-z][A-Za-z\s,.'\-]{1,100}"
-        r"\s+\(Reuters\)\s*[-–—:]\s*",
+        r"^\s*[A-Za-z][A-Za-z\s,.'\-]{1,100}" r"\s+\(Reuters\)\s*[-–—:]\s*",
         "",
         text,
     )
@@ -93,9 +93,7 @@ def clean_news_text(text: object) -> str:
 
     # Remove common labels from the beginning of an article or title.
     text = re.sub(
-        r"^\s*"
-        r"(VIDEO|WATCH|BREAKING|READ MORE|UPDATE|EXCLUSIVE)"
-        r"\s*[:\-–—]\s*",
+        r"^\s*" r"(VIDEO|WATCH|BREAKING|READ MORE|UPDATE|EXCLUSIVE)" r"\s*[:\-–—]\s*",
         "",
         text,
         flags=re.IGNORECASE,
@@ -129,6 +127,9 @@ def clean_news_text(text: object) -> str:
     text = re.sub(r"\s+", " ", text).strip()
 
     return text
+
+
+clean_news_text = text_cleaning.clean_news_text
 
 
 def normalize_label(label: object) -> int | None:
@@ -209,10 +210,7 @@ def normalize_column_names(dataset: Dataset) -> Dataset:
     """
     original_columns = dataset.column_names
 
-    normalized_columns = {
-        column: column.strip().lower()
-        for column in original_columns
-    }
+    normalized_columns = {column: column.strip().lower() for column in original_columns}
 
     # Detect names that would become duplicates after normalization.
     final_names = list(normalized_columns.values())
@@ -330,9 +328,7 @@ def deduplicate_across_splits(
 
     for split in expected_splits:
         if split not in dataset:
-            raise ValueError(
-                f"Dataset is missing the required '{split}' split."
-            )
+            raise ValueError(f"Dataset is missing the required '{split}' split.")
 
     # ---------------------------------------------------------
     # First pass: detect contradictory labels.
@@ -344,9 +340,7 @@ def deduplicate_across_splits(
         texts = dataset[split]["text"]
         labels = dataset[split]["label"]
 
-        for row_index, (text, label) in enumerate(
-            zip(texts, labels)
-        ):
+        for row_index, (text, label) in enumerate(zip(texts, labels)):
             duplicate_key = normalize_for_duplicate_check(text)
 
             if not duplicate_key:
@@ -393,9 +387,7 @@ def deduplicate_across_splits(
     for split in expected_splits:
         keep_indices: list[int] = []
 
-        for row_index, text in enumerate(
-            dataset[split]["text"]
-        ):
+        for row_index, text in enumerate(dataset[split]["text"]):
             duplicate_key = normalize_for_duplicate_check(text)
 
             if not duplicate_key:
@@ -411,9 +403,7 @@ def deduplicate_across_splits(
         final_size = len(keep_indices)
         removed_count = original_size - final_size
 
-        deduplicated_dataset[split] = dataset[split].select(
-            keep_indices
-        )
+        deduplicated_dataset[split] = dataset[split].select(keep_indices)
 
         print(
             f"  {split}: removed {removed_count:,} duplicate rows "
@@ -443,13 +433,9 @@ def limit_split_size(
         split_dataset = dataset[split]
 
         if len(split_dataset) > max_samples:
-            split_dataset = split_dataset.shuffle(
-                seed=random_seed
-            )
+            split_dataset = split_dataset.shuffle(seed=random_seed)
 
-            split_dataset = split_dataset.select(
-                range(max_samples)
-            )
+            split_dataset = split_dataset.select(range(max_samples))
 
         limited_dataset[split] = split_dataset
 
@@ -463,29 +449,15 @@ def print_dataset_summary(dataset: DatasetDict) -> None:
     for split in ["train", "validation", "test"]:
         labels = dataset[split]["label"]
 
-        fake_count = sum(
-            1 for label in labels
-            if label == FAKE_LABEL
-        )
+        fake_count = sum(1 for label in labels if label == FAKE_LABEL)
 
-        real_count = sum(
-            1 for label in labels
-            if label == REAL_LABEL
-        )
+        real_count = sum(1 for label in labels if label == REAL_LABEL)
 
         total = len(dataset[split])
 
-        fake_percentage = (
-            fake_count / total * 100
-            if total > 0
-            else 0
-        )
+        fake_percentage = fake_count / total * 100 if total > 0 else 0
 
-        real_percentage = (
-            real_count / total * 100
-            if total > 0
-            else 0
-        )
+        real_percentage = real_count / total * 100 if total > 0 else 0
 
         print(
             f"  {split}: {total:,} rows\n"
@@ -558,18 +530,14 @@ def load_fake_news_dataset(
     """
     if name != "local_master":
         raise ValueError(
-            f"Unknown dataset configuration: {name!r}. "
-            "Use 'local_master'."
+            f"Unknown dataset configuration: {name!r}. " "Use 'local_master'."
         )
 
     # ---------------------------------------------------------
     # Resolve dataset directory.
     # ---------------------------------------------------------
     if datasets_dir is None:
-        datasets_path = (
-            Path(__file__).resolve().parent.parent
-            / "datasets"
-        )
+        datasets_path = Path(__file__).resolve().parent.parent / "datasets"
     else:
         datasets_path = Path(datasets_dir).expanduser().resolve()
 
@@ -585,8 +553,7 @@ def load_fake_news_dataset(
     for split, file_path in data_files.items():
         if not Path(file_path).is_file():
             raise FileNotFoundError(
-                f"Missing dataset file for '{split}': "
-                f"{file_path}"
+                f"Missing dataset file for '{split}': " f"{file_path}"
             )
 
     print("Loading local fake-news dataset:")
@@ -603,18 +570,12 @@ def load_fake_news_dataset(
     # Validate and prepare every split separately.
     # ---------------------------------------------------------
     for split in ["train", "validation", "test"]:
-        split_dataset = normalize_column_names(
-            dataset[split]
-        )
+        split_dataset = normalize_column_names(dataset[split])
 
-        available_columns = set(
-            split_dataset.column_names
-        )
+        available_columns = set(split_dataset.column_names)
 
         required_columns = {"text", "label"}
-        missing_columns = (
-            required_columns - available_columns
-        )
+        missing_columns = required_columns - available_columns
 
         if missing_columns:
             raise ValueError(
@@ -629,14 +590,9 @@ def load_fake_news_dataset(
         has_title = "title" in available_columns
 
         if has_title:
-            print(
-                f"  {split}: title found; concatenating "
-                "title with text."
-            )
+            print(f"  {split}: title found; concatenating " "title with text.")
         else:
-            print(
-                f"  {split}: no title column; using text only."
-            )
+            print(f"  {split}: no title column; using text only.")
 
         original_columns = split_dataset.column_names
 
@@ -658,9 +614,7 @@ def load_fake_news_dataset(
         )
 
         # Ensure the model sees only these two columns.
-        split_dataset = split_dataset.select_columns(
-            ["text", "label"]
-        )
+        split_dataset = split_dataset.select_columns(["text", "label"])
 
         prepared_dataset[split] = split_dataset
 
@@ -670,23 +624,15 @@ def load_fake_news_dataset(
     # Remove duplicate leakage.
     # ---------------------------------------------------------
     if remove_duplicates:
-        print(
-            "\nChecking duplicate texts across "
-            "train, validation, and test..."
-        )
+        print("\nChecking duplicate texts across " "train, validation, and test...")
 
-        dataset = deduplicate_across_splits(
-            dataset
-        )
+        dataset = deduplicate_across_splits(dataset)
 
     # ---------------------------------------------------------
     # Optionally reduce dataset size.
     # ---------------------------------------------------------
     if max_samples is not None:
-        print(
-            f"\nLimiting each split to at most "
-            f"{max_samples:,} examples..."
-        )
+        print(f"\nLimiting each split to at most " f"{max_samples:,} examples...")
 
         dataset = limit_split_size(
             dataset=dataset,

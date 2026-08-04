@@ -144,7 +144,7 @@ function ResultPanel({ result }) {
       h(Text, { style: styles.metricValue }, valueOrDash(result.confidence))
     ),
     h(View, { style: styles.metricRow },
-      h(Text, { style: styles.metricLabel }, "Writing style"),
+      h(Text, { style: styles.metricLabel }, "Style signal strength"),
       h(Text, { style: styles.metricValue }, styleConfidence)
     ),
     h(Text, { style: styles.meta }, valueOrDash(styleText)),

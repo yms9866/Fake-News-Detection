@@ -159,7 +159,7 @@ function renderStyleSignal(result) {
   const limitation = assessment.limitation || "This assessment evaluates writing patterns only. Writing style alone cannot establish whether the claims are true or false.";
   section.append(el("h3", "Writing-style assessment"));
   section.append(el("p", textOnly(displayText, "The writing-style assessment is unavailable.")));
-  section.append(el("p", `Style confidence: ${textOnly(displayConfidence, "N/A")}`, "confidence-line"));
+  section.append(el("p", `Style signal strength: ${textOnly(displayConfidence, "N/A")}`, "confidence-line"));
   section.append(el("p", textOnly(limitation), "muted"));
   if (assessment.warning || result.style_warning) {
     section.append(el("p", textOnly(assessment.warning || result.style_warning), "muted"));

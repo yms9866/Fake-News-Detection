@@ -62,6 +62,10 @@ summary:focus-visible {
   color: #ffffff;
 }
 
+.content-shell {
+  min-width: 0;
+}
+
 .screen {
   padding: 28px;
   max-width: 1120px;

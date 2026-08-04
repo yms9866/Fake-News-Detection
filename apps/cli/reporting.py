@@ -36,14 +36,14 @@ def print_analysis_report(result: AnalysisResult, deep_check: bool) -> None:
 
     if result.style.signal == StyleRiskSignal.ERROR:
         print("Style Assessment: ERROR")
-        print("Style Confidence: N/A")
+        print("Style Signal Strength: N/A")
 
         if result.style.error:
             print(f"Error: {_friendly_provider_issue(result.style.error)}")
     else:
         print(f"Style Assessment: {result.style.display_text}")
         print(f"Style Label: {_style_signal_label(result)}")
-        print(f"Style Confidence: {result.style.display_confidence}")
+        print(f"Style Signal Strength: {result.style.display_confidence}")
         print(f"Interpretation: {result.style.limitation}")
 
         if result.style.warning:

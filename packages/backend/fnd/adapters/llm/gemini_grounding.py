@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import re
 from time import perf_counter
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -97,6 +98,24 @@ def _normalize_source_type(value: Any) -> SourceType:
 def _publisher_from_url(url: str) -> str:
     hostname = (urlparse(url).hostname or "").lower()
     return hostname.removeprefix("www.")
+
+
+def _publisher_from_grounding(title: str, url: str) -> str:
+    normalized_title = title.strip().lower().removeprefix("www.")
+    if _looks_like_domain(normalized_title):
+        return normalized_title
+    return _publisher_from_url(url)
+
+
+def _looks_like_domain(value: str) -> bool:
+    if "/" in value or " " in value:
+        return False
+    return bool(
+        re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9-]{2,})+",
+            value,
+        )
+    )
 
 
 def _response_text(candidate: dict[str, Any]) -> str:
@@ -194,14 +213,15 @@ def _grounded_items(
             and direct
             and bool(source_passages)
         )
-        publisher = _publisher_from_url(url)
+        title = str(web.get("title") or url).strip()
+        publisher = _publisher_from_grounding(title, url)
         related_claim_ids = assessment.get("related_claim_ids")
 
         items.append(
             EvidenceItem(
                 source_id=f"source-{index + 1}",
                 url=url,
-                title=str(web.get("title") or url).strip(),
+                title=title,
                 publisher=publisher,
                 related_claim_ids=(
                     tuple(str(value) for value in related_claim_ids)

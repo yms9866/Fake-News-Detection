@@ -159,10 +159,15 @@ export function renderWebApp(root) {
     state.route = "result";
   }
 
-  function nav(label, route) {
-    const node = button(label, () => actions.navigate(route), route === state.route ? "nav active" : "nav");
+  function nav(label, route, icon = "") {
+    const node = button(`${icon} ${label}`, () => actions.navigate(route), route === state.route ? "nav active" : "nav");
     node.setAttribute("aria-current", route === state.route ? "page" : "false");
     return node;
+  }
+  
+  function navSection(title) {
+    const header = el("div", title, "nav-section-header");
+    return header;
   }
 
   function draw() {
@@ -172,17 +177,20 @@ export function renderWebApp(root) {
     const navigation = document.createElement("nav");
     navigation.setAttribute("aria-label", "Primary");
     navigation.append(
-      nav("Analyze", "analyze"),
-      nav("Media", "media"),
-      nav("Capture", "capture"),
-      nav("Live", "live"),
-      nav("Result", "result"),
-      nav("History", "history"),
-      nav("Report", "report"),
-      nav("Review", "review"),
-      nav("Admin", "admin"),
-      nav("Auth", "auth"),
-      nav("Diagnostics", "diagnostics")
+      navSection("Input"),
+      nav("Analyze", "analyze", "📝"),
+      nav("Media", "media", "📎"),
+      nav("Capture", "capture", "📷"),
+      nav("Live", "live", "🔴"),
+      navSection("Results"),
+      nav("Result", "result", "✓"),
+      nav("History", "history", "📜"),
+      nav("Report", "report", "📊"),
+      nav("Review", "review", "👁"),
+      navSection("System"),
+      nav("Admin", "admin", "⚙"),
+      nav("Auth", "auth", "🔐"),
+      nav("Diagnostics", "diagnostics", "🔧")
     );
     layout.append(navigation);
     const content = div("content-shell");
@@ -299,21 +307,109 @@ export function renderWebApp(root) {
 
   function renderHistory() {
     const screen = div("screen");
-    screen.append(el("h1", "History"));
+    screen.append(el("h1", "Analysis History"));
+    screen.append(el("p", "Your recent analyses are stored here for quick reference.", "muted"));
     if (state.history.length === 0) {
       screen.append(renderEmptyState("No history yet", "Completed analyses will appear here for quick review."));
       return screen;
     }
+    const list = div("history-list");
     for (const item of state.history) {
-      screen.append(el("p", `${item.analysisId} ${item.finalVerdict}`));
+      const card = div("history-card panel");
+      card.append(el("p", item.finalVerdict || "Unknown verdict", "eyebrow"));
+      card.append(el("h3", item.analysisId || "Untitled analysis"));
+      if (item.confidence) {
+        card.append(el("p", `Confidence: ${item.confidence}`, "muted"));
+      }
+      if (item.timestamp) {
+        card.append(el("p", new Date(item.timestamp).toLocaleString(), "muted"));
+      }
+      const viewButton = button("View result", () => {
+        state.result = item;
+        state.route = "result";
+        draw();
+      });
+      card.append(viewButton);
+      list.append(card);
     }
+    screen.append(list);
     return screen;
   }
 
   function renderReport() {
     const screen = div("screen");
-    screen.append(el("h1", "Report"));
-    screen.append(el("pre", JSON.stringify(state.result || {}, null, 2)));
+    screen.append(el("h1", "Analysis Report"));
+    if (!state.result) {
+      screen.append(renderEmptyState("No analysis data", "Run an analysis to generate a detailed report."));
+      return screen;
+    }
+    const report = div("report-container");
+    
+    // Summary section
+    const summary = div("panel");
+    summary.append(el("h3", "Summary"));
+    summary.append(el("p", `Verdict: ${state.result.final_verdict || "Unknown"}`));
+    summary.append(el("p", `Confidence: ${state.result.confidence || "N/A"}`));
+    if (state.result.reason) {
+      summary.append(el("p", state.result.reason, "muted"));
+    }
+    report.append(summary);
+    
+    // Technical details section
+    const technical = div("panel");
+    technical.append(el("h3", "Technical Details"));
+    const details = div("technical-details");
+    
+    if (state.result.analysis_id) {
+      details.append(el("p", `Analysis ID: ${state.result.analysis_id}`, "muted"));
+    }
+    if (state.result.timestamp) {
+      details.append(el("p", `Analyzed: ${new Date(state.result.timestamp).toLocaleString()}`, "muted"));
+    }
+    if (state.result.style_signal) {
+      details.append(el("p", `Style Signal: ${state.result.style_signal}`, "muted"));
+    }
+    if (state.result.style_confidence) {
+      details.append(el("p", `Style Confidence: ${(state.result.style_confidence * 100).toFixed(1)}%`, "muted"));
+    }
+    technical.append(details);
+    report.append(technical);
+    
+    // Claims section
+    if (state.result.claims && state.result.claims.length > 0) {
+      const claims = div("panel");
+      claims.append(el("h3", `Claims Checked (${state.result.claims.length})`));
+      const claimsList = div("claims-list");
+      state.result.claims.forEach((claim, index) => {
+        const claimItem = div("claim-item");
+        claimItem.append(el("p", `Claim ${index + 1}`, "eyebrow"));
+        claimItem.append(el("p", claim.claim_text || "No text"));
+        claimItem.append(el("p", `Status: ${claim.verification_status || "Unknown"}`, "muted"));
+        claimsList.append(claimItem);
+      });
+      claims.append(claimsList);
+      report.append(claims);
+    }
+    
+    // Sources section
+    if (state.result.sources && state.result.sources.length > 0) {
+      const sources = div("panel");
+      sources.append(el("h3", `Sources Reviewed (${state.result.sources.length})`));
+      const sourcesList = div("sources-list");
+      state.result.sources.forEach((source, index) => {
+        const sourceItem = div("source-item");
+        sourceItem.append(el("p", `Source ${index + 1}`, "eyebrow"));
+        sourceItem.append(el("p", source.title || "Untitled"));
+        if (source.publisher) {
+          sourceItem.append(el("p", source.publisher, "muted"));
+        }
+        sourcesList.append(sourceItem);
+      });
+      sources.append(sourcesList);
+      report.append(sources);
+    }
+    
+    screen.append(report);
     return screen;
   }
 
@@ -341,8 +437,72 @@ export function renderWebApp(root) {
 
   function renderDiagnostics() {
     const screen = div("screen");
-    screen.append(el("h1", "Diagnostics"), button("Refresh diagnostics", actions.diagnostics));
-    screen.append(el("pre", JSON.stringify(state.diagnostics || {}, null, 2)));
+    screen.append(el("h1", "System Diagnostics"));
+    screen.append(el("p", "Check the health and status of the backend services.", "muted"));
+    screen.append(button("Refresh diagnostics", actions.diagnostics));
+    
+    if (!state.diagnostics) {
+      screen.append(renderEmptyState("No diagnostics data", "Click refresh to check system status."));
+      return screen;
+    }
+    
+    const container = div("diagnostics-container");
+    
+    // Backend status
+    if (state.diagnostics.backend) {
+      const backendPanel = div("panel");
+      backendPanel.append(el("h3", "Backend Status"));
+      const backendStatus = state.diagnostics.backend.state || "unknown";
+      const statusColor = backendStatus === "ready" ? "var(--accent)" : backendStatus === "error" ? "var(--danger)" : "var(--muted)";
+      backendPanel.append(el("p", `Status: ${backendStatus.toUpperCase()}`, "muted"));
+      backendPanel.append(el("p", `Version: ${state.diagnostics.backend.version || "Unknown"}`, "muted"));
+      if (state.diagnostics.backend.uptime) {
+        backendPanel.append(el("p", `Uptime: ${state.diagnostics.backend.uptime}`, "muted"));
+      }
+      container.append(backendPanel);
+    }
+    
+    // Live service status
+    if (state.diagnostics.live) {
+      const livePanel = div("panel");
+      livePanel.append(el("h3", "Live OCR Service"));
+      livePanel.append(el("p", `Status: ${state.diagnostics.live.status || "Unknown"}`, "muted"));
+      if (state.diagnostics.live.message) {
+        livePanel.append(el("p", state.diagnostics.live.message, "muted"));
+      }
+      container.append(livePanel);
+    }
+    
+    // Ready service status
+    if (state.diagnostics.ready) {
+      const readyPanel = div("panel");
+      readyPanel.append(el("h3", "API Readiness"));
+      readyPanel.append(el("p", `Status: ${state.diagnostics.ready.status || "Unknown"}`, "muted"));
+      if (state.diagnostics.ready.message) {
+        readyPanel.append(el("p", state.diagnostics.ready.message, "muted"));
+      }
+      container.append(readyPanel);
+    }
+    
+    // Available models
+    if (state.diagnostics.models && Array.isArray(state.diagnostics.models)) {
+      const modelsPanel = div("panel");
+      modelsPanel.append(el("h3", `Available Models (${state.diagnostics.models.length})`));
+      const modelsList = div("models-list");
+      state.diagnostics.models.forEach((model, index) => {
+        const modelItem = div("model-item");
+        modelItem.append(el("p", `Model ${index + 1}`, "eyebrow"));
+        modelItem.append(el("p", model.name || "Unnamed model"));
+        if (model.type) {
+          modelItem.append(el("p", model.type, "muted"));
+        }
+        modelsList.append(modelItem);
+      });
+      modelsPanel.append(modelsList);
+      container.append(modelsPanel);
+    }
+    
+    screen.append(container);
     return screen;
   }
 

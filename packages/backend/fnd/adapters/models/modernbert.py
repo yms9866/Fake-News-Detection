@@ -12,6 +12,7 @@ from typing import Any, cast
 
 from packages.backend.fnd.domain.entities import StyleAnalysis
 from packages.backend.fnd.domain.enums import StyleRiskSignal
+from src.text_cleaning import clean_news_text
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +104,9 @@ class ModernBertStyleModel:
 
         inference_start = perf_counter()
         try:
+            model_input_text = _prepare_style_model_input(text)
             inputs = self._tokenizer(
-                text,
+                model_input_text,
                 truncation=True,
                 padding="max_length",
                 max_length=max_length,
@@ -130,6 +132,8 @@ class ModernBertStyleModel:
                     inputs if "inputs" in locals() else None,
                     max_length,
                 ),
+                cleaned_for_inference="model_input_text" in locals()
+                and model_input_text != text,
             )
 
         return StyleAnalysis.from_prediction(
@@ -271,6 +275,11 @@ def _label_map_for_log(mapping: dict[int, StyleRiskSignal]) -> str:
     return ",".join(
         f"{label_id}:{signal.value}" for label_id, signal in sorted(mapping.items())
     )
+
+
+def _prepare_style_model_input(text: str) -> str:
+    cleaned = clean_news_text(text)
+    return cleaned if cleaned else str(text or "").strip()
 
 
 def _token_count(inputs: Any | None) -> int:
