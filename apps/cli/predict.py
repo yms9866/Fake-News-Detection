@@ -79,6 +79,7 @@ def main() -> None:
 
     try:
         result = workflow.analyze(command_from_args(args))
+        print(type(result))
     except FndError as exc:
         raise SystemExit(f"[ERROR] {exc}") from exc
 

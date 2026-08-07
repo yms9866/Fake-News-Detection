@@ -1,12 +1,12 @@
+import { useState, useEffect } from "react";
 import { createWebApiClient } from "./api/client.js";
-import { button, checkbox, div, el, field, input, textarea } from "./components/dom.js";
-import { renderResultView } from "./components/result-view.js";
-import { compactHistoryItem } from "./components/safe-rendering.js";
-import { renderConnectionStatus, renderEmptyState, renderErrorPanel, renderLoadingState } from "./components/status-panels.js";
-import { requestCameraImage, requestDisplayCapture, requestMicrophone, stopStream } from "./capture/browser-capture.js";
 import { createBackendAuthAdapter } from "./auth/dev-auth.js";
 import { createHistoryStore } from "./stores/history-store.js";
+import { compactHistoryItem } from "./components/safe-rendering.js";
 import { createCsrfToken } from "./security/csrf.js";
+import { requestCameraImage, requestDisplayCapture, requestMicrophone, stopStream } from "./capture/browser-capture.js";
+import { ConnectionStatus, EmptyState, ErrorPanel, LoadingState } from "./components/status-panels";
+import { ResultView } from "./components/result-view";
 
 const DEFAULT_SETTINGS = {
   backendOrigin: "http://127.0.0.1:8000",
@@ -16,198 +16,249 @@ const DEFAULT_SETTINGS = {
   csrfToken: createCsrfToken("web-client")
 };
 
-export function renderWebApp(root) {
+export default function App() {
   const client = createWebApiClient(DEFAULT_SETTINGS);
   const auth = createBackendAuthAdapter(client);
   const history = createHistoryStore();
-  const state = {
-    route: "analyze",
-    session: null,
-    result: null,
-    job: null,
-    live: null,
-    diagnostics: null,
-    connection: { status: "unknown", origin: DEFAULT_SETTINGS.backendOrigin },
-    loading: false,
-    error: null,
-    lastRetry: null,
-    history: []
-  };
+  
+  const [route, setRoute] = useState("analyze");
+  const [session, setSession] = useState<any>(null);
+  const [result, setAnalysisResult] = useState<any>(null);
+  const [job, setJob] = useState<any>(null);
+  const [live, setLive] = useState<any>(null);
+  const [diagnostics, setDiagnostics] = useState<any>(null);
+  const [connection, setConnection] = useState({ status: "unknown", origin: DEFAULT_SETTINGS.backendOrigin });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<any>(null);
+  const [lastRetry, setLastRetry] = useState<(() => void) | null>(null);
+  const [historyList, setHistoryList] = useState<any[]>([]);
 
   const actions = {
-    navigate(route) {
-      state.route = route;
-      draw();
+    navigate(newRoute: string) {
+      setRoute(newRoute);
     },
     async checkConnection() {
-      state.connection = { status: "checking", origin: client.backendOrigin };
-      state.lastRetry = actions.checkConnection;
-      draw();
+      setConnection({ status: "checking", origin: DEFAULT_SETTINGS.backendOrigin });
+      setLastRetry(() => actions.checkConnection);
       try {
         await client.live();
-        state.connection = { status: "ready", origin: client.backendOrigin };
+        setConnection({ status: "ready", origin: DEFAULT_SETTINGS.backendOrigin });
       } catch (error) {
-        state.connection = { status: "unavailable", origin: client.backendOrigin };
-        state.error = normalizeUiError(error);
+        setConnection({ status: "unavailable", origin: DEFAULT_SETTINGS.backendOrigin });
+        setError(normalizeUiError(error));
       }
-      draw();
     },
     async signIn() {
-      await run(async () => {
-        state.session = await auth.signIn("local-reviewer");
-      });
+      setLoading(true);
+      setError(null);
+      try {
+        setSession(await auth.signIn("local-reviewer"));
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
     async signOut() {
-      await run(async () => {
+      setLoading(true);
+      setError(null);
+      try {
         await auth.signOut();
-        state.session = null;
-      });
+        setSession(null);
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
-    async analyzeText(payload) {
-      await run(async () => setResult(await client.analyzeText(payload)));
+    async analyzeText(payload: any) {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await client.analyzeText(payload);
+        setAnalysisResult(result);
+        setHistoryList(history.add(compactHistoryItem(result)));
+        setRoute("result");
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
-    async analyzeUrl(payload) {
-      await run(async () => setResult(await client.analyzeUrl(payload)));
+    async analyzeUrl(payload: any) {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await client.analyzeUrl(payload);
+        setAnalysisResult(result);
+        setHistoryList(history.add(compactHistoryItem(result)));
+        setRoute("result");
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
-    async uploadMedia(file) {
-      await run(async () => {
+    async uploadMedia(file: File) {
+      setLoading(true);
+      setError(null);
+      try {
         if (!file) {
           throw new Error("Choose a media file first.");
         }
         const type = file.type.startsWith("audio/") ? "audio" : file.type.startsWith("video/") ? "video" : "image";
         const accepted = await client.uploadMedia(type, file, { deepCheck: false, maxLength: 512 });
-        state.job = await client.getJob(accepted.job_id);
-      });
+        setJob(await client.getJob(accepted.job_id));
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
     async cancelJob() {
-      await run(async () => {
-        if (state.job) {
-          state.job = await client.cancelJob(state.job.job_id);
+      setLoading(true);
+      setError(null);
+      try {
+        if (job) {
+          setJob(await client.cancelJob(job.job_id));
         }
-      });
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
-    async capture(kind) {
-      await run(async () => {
+    async capture(kind: string) {
+      setLoading(true);
+      setError(null);
+      try {
         const stream = kind === "display"
           ? await requestDisplayCapture()
           : kind === "camera"
             ? await requestCameraImage()
             : await requestMicrophone();
         stopStream(stream);
-      });
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
     async startLive() {
-      await run(async () => {
-        state.live = await client.createLiveSession({
+      setLoading(true);
+      setError(null);
+      try {
+        setLive(await client.createLiveSession({
           source_type: "screen",
           source_id: "browser-display",
           permission_granted: true
-        });
-      });
+        }));
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
-    async submitLiveText(text) {
-      await run(async () => {
-        if (!state.live) {
+    async submitLiveText(text: string) {
+      setLoading(true);
+      setError(null);
+      try {
+        if (!live) {
           throw new Error("Start a live session first.");
         }
-        state.live = await client.submitLiveFrame(state.live.session_id, {
+        setLive(await client.submitLiveFrame(live.session_id, {
           frame_id: `web-frame-${Date.now()}`,
           perceptual_hash: String(Date.now()),
           ocr_text: text
-        });
-      });
+        }));
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
     async verifyLive() {
-      await run(async () => {
-        if (state.live) {
-          state.live = await client.verifyLiveSession(state.live.session_id, { trigger: "user", force: true });
+      setLoading(true);
+      setError(null);
+      try {
+        if (live) {
+          setLive(await client.verifyLiveSession(live.session_id, { trigger: "user", force: true }));
         }
-      });
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     },
     async diagnostics() {
-      await run(async () => {
-        state.diagnostics = {
+      setLoading(true);
+      setError(null);
+      try {
+        setDiagnostics({
           live: await client.live(),
           ready: await client.ready(),
           models: await client.models()
-        };
-      });
+        });
+      } catch (error) {
+        setError(normalizeUiError(error));
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  async function run(operation) {
-    state.error = null;
-    state.loading = true;
-    state.lastRetry = () => run(operation);
-    draw();
-    try {
-      await operation();
-    } catch (error) {
-      state.error = normalizeUiError(error);
-      if (!state.error.status) {
-        state.connection = { status: "unavailable", origin: client.backendOrigin };
-      }
-    } finally {
-      state.loading = false;
-    }
-    draw();
-  }
+  // Initialize connection check on mount
+  useEffect(() => {
+    actions.checkConnection();
+  }, []);
 
-  function setResult(result) {
-    state.result = result;
-    state.history = history.add(compactHistoryItem(result));
-    state.route = "result";
-  }
-
-  function nav(label, route, icon = "") {
-    const node = button(`${icon} ${label}`, () => actions.navigate(route), route === state.route ? "nav active" : "nav");
-    node.setAttribute("aria-current", route === state.route ? "page" : "false");
-    return node;
-  }
-  
-  function navSection(title) {
-    const header = el("div", title, "nav-section-header");
-    return header;
-  }
-
-  function draw() {
-    root.replaceChildren();
-    const layout = document.createElement("main");
-    layout.className = "app-shell";
-    const navigation = document.createElement("nav");
-    navigation.setAttribute("aria-label", "Primary");
-    navigation.append(
-      navSection("Input"),
-      nav("Analyze", "analyze", "📝"),
-      nav("Media", "media", "📎"),
-      nav("Capture", "capture", "📷"),
-      nav("Live", "live", "🔴"),
-      navSection("Results"),
-      nav("Result", "result", "✓"),
-      nav("History", "history", "📜"),
-      nav("Report", "report", "📊"),
-      nav("Review", "review", "👁"),
-      navSection("System"),
-      nav("Admin", "admin", "⚙"),
-      nav("Auth", "auth", "🔐"),
-      nav("Diagnostics", "diagnostics", "🔧")
+  function NavButton({ label, route: targetRoute, icon }: { label: string; route: string; icon: string }) {
+    const isActive = route === targetRoute;
+    return (
+      <button
+        className={isActive ? "nav active" : "nav"}
+        aria-current={isActive ? "page" : "false"}
+        onClick={() => actions.navigate(targetRoute)}
+      >
+        {icon} {label}
+      </button>
     );
-    layout.append(navigation);
-    const content = div("content-shell");
-    content.append(renderConnectionStatus(state.connection, actions.checkConnection));
-    if (state.error) {
-      content.append(renderErrorPanel(state.error, state.lastRetry));
-    }
-    if (state.loading) {
-      content.append(renderLoadingState("Analyzing"));
-    }
-    content.append(renderRoute());
-    layout.append(content);
-    root.append(layout);
   }
+
+  function NavSection({ title }: { title: string }) {
+    return <div className="nav-section-header">{title}</div>;
+  }
+
+  // Main JSX render
+  return (
+    <main className="app-shell">
+      <nav aria-label="Primary">
+        <NavSection title="Input" />
+        <NavButton label="Analyze" route="analyze" icon="📝" />
+        <NavButton label="Media" route="media" icon="📎" />
+        <NavButton label="Capture" route="capture" icon="📷" />
+        <NavButton label="Live" route="live" icon="🔴" />
+        <NavSection title="Results" />
+        <NavButton label="Result" route="result" icon="✓" />
+        <NavButton label="History" route="history" icon="📜" />
+        <NavButton label="Report" route="report" icon="📊" />
+        <NavButton label="Review" route="review" icon="👁" />
+        <NavSection title="System" />
+        <NavButton label="Admin" route="admin" icon="⚙" />
+        <NavButton label="Auth" route="auth" icon="🔐" />
+        <NavButton label="Diagnostics" route="diagnostics" icon="🔧" />
+      </nav>
+      <div className="content-shell">
+        <ConnectionStatus connection={connection} retryAction={actions.checkConnection} />
+        {error && <ErrorPanel error={error} retryAction={lastRetry} />}
+        {loading && <LoadingState message="Analyzing" />}
+        {renderRoute()}
+      </div>
+    </main>
+  );
 
   function renderRoute() {
-    switch (state.route) {
+    switch (route) {
       case "media":
         return renderMedia();
       case "capture":
@@ -234,285 +285,305 @@ export function renderWebApp(root) {
   }
 
   function renderAnalyze() {
-    const screen = div("screen");
-    screen.append(el("p", "Evidence-focused analysis", "eyebrow"));
-    screen.append(el("h1", "Check a claim, article, or source"));
-    screen.append(el("p", "The final verdict is based on deterministic evidence policy. Style analysis is shown separately and never proves truth by itself.", "lede"));
-    const text = textarea("");
-    const url = input("url", "");
-    const deepCheck = checkbox(DEFAULT_SETTINGS.defaultDeepCheck);
-    const maxLength = input("number", String(DEFAULT_SETTINGS.defaultMaxLength));
-    maxLength.min = "128";
-    maxLength.max = "8192";
-    maxLength.step = "1";
-    screen.append(
-      field("Text", text),
-      field("URL", url),
-      field("Deep check", deepCheck),
-      field("Max length", maxLength)
+    const [text, setText] = useState("");
+    const [url, setUrl] = useState("");
+    const [deepCheck, setDeepCheck] = useState(DEFAULT_SETTINGS.defaultDeepCheck);
+    const [maxLength, setMaxLength] = useState(String(DEFAULT_SETTINGS.defaultMaxLength));
+
+    return (
+      <div className="screen">
+        <p className="eyebrow">Evidence-focused analysis</p>
+        <h1>Check a claim, article, or source</h1>
+        <p className="lede">The final verdict is based on deterministic evidence policy. Style analysis is shown separately and never proves truth by itself.</p>
+        <label>
+          Text
+          <textarea value={text} onChange={(e) => setText(e.target.value)} />
+        </label>
+        <label>
+          URL
+          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} />
+        </label>
+        <label>
+          Deep check
+          <input type="checkbox" checked={deepCheck} onChange={(e) => setDeepCheck(e.target.checked)} />
+        </label>
+        <label>
+          Max length
+          <input
+            type="number"
+            value={maxLength}
+            min="128"
+            max="8192"
+            step="1"
+            onChange={(e) => setMaxLength(e.target.value)}
+          />
+        </label>
+        <div className="actions">
+          <button onClick={() => actions.analyzeText({ text, deep_check: deepCheck, max_length: Number(maxLength) || DEFAULT_SETTINGS.defaultMaxLength })}>
+            Analyze text
+          </button>
+          <button onClick={() => actions.analyzeUrl({ url, deep_check: deepCheck, max_length: Number(maxLength) || DEFAULT_SETTINGS.defaultMaxLength })}>
+            Analyze URL
+          </button>
+        </div>
+      </div>
     );
-    const actionsRow = div("actions");
-    actionsRow.append(
-      button("Analyze text", () => actions.analyzeText({ text: text.value, deep_check: deepCheck.checked, max_length: Number(maxLength.value) || DEFAULT_SETTINGS.defaultMaxLength })),
-      button("Analyze URL", () => actions.analyzeUrl({ url: url.value, deep_check: deepCheck.checked, max_length: Number(maxLength.value) || DEFAULT_SETTINGS.defaultMaxLength }))
-    );
-    screen.append(actionsRow);
-    return screen;
   }
 
   function renderMedia() {
-    const screen = div("screen");
-    screen.append(el("h1", "Media"));
-    const file = input("file");
-    file.accept = "image/*,audio/*,video/*";
-    screen.append(field("Upload", file), button("Analyze upload", () => actions.uploadMedia(file.files && file.files[0])));
-    if (state.job) {
-      screen.append(el("p", `${state.job.status}: ${state.job.message || ""}`, "muted"), button("Cancel job", actions.cancelJob, "danger"));
-    }
-    return screen;
+    const [file, setFile] = useState<File | null>(null);
+    
+    return (
+      <div className="screen">
+        <h1>Media</h1>
+        <label>
+          Upload
+          <input
+            type="file"
+            accept="image/*,audio/*,video/*"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+        </label>
+        <button onClick={() => { if (file) actions.uploadMedia(file); }}>Analyze upload</button>
+        {job && (
+          <>
+            <p className="muted">{job.status}: {job.message || ""}</p>
+            <button className="danger" onClick={actions.cancelJob}>Cancel job</button>
+          </>
+        )}
+      </div>
+    );
   }
 
   function renderCapture() {
-    const screen = div("screen");
-    screen.append(el("h1", "Browser Capture"));
-    screen.append(
-      button("Display capture", () => actions.capture("display")),
-      button("Camera image", () => actions.capture("camera")),
-      button("Microphone recording", () => actions.capture("microphone"))
+    return (
+      <div className="screen">
+        <h1>Browser Capture</h1>
+        <button onClick={() => actions.capture("display")}>Display capture</button>
+        <button onClick={() => actions.capture("camera")}>Camera image</button>
+        <button onClick={() => actions.capture("microphone")}>Microphone recording</button>
+      </div>
     );
-    return screen;
   }
 
   function renderLive() {
-    const screen = div("screen");
-    const text = textarea("Live OCR text block");
-    screen.append(el("h1", "Live OCR"));
-    screen.append(field("Frame text", text));
-    screen.append(button("Start live session", actions.startLive), button("Submit frame", () => actions.submitLiveText(text.value)), button("Verify", actions.verifyLive));
-    if (state.live) {
-      screen.append(el("p", liveStatusText(state.live), "muted"));
-      if (state.live.stable_text) {
-        screen.append(el("p", state.live.stable_text, "muted"));
-      }
-    }
-    return screen;
+    const [text, setText] = useState("");
+    
+    return (
+      <div className="screen">
+        <h1>Live OCR</h1>
+        <label>
+          Frame text
+          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Live OCR text block" />
+        </label>
+        <button onClick={actions.startLive}>Start live session</button>
+        <button onClick={() => actions.submitLiveText(text)}>Submit frame</button>
+        <button onClick={actions.verifyLive}>Verify</button>
+        {live && (
+          <>
+            <p className="muted">{liveStatusText(live)}</p>
+            {live.stable_text && <p className="muted">{live.stable_text}</p>}
+          </>
+        )}
+      </div>
+    );
   }
 
   function renderResult() {
-    const screen = div("screen result");
-    screen.append(el("h1", "Analysis result"));
-    screen.append(renderResultView(state.result));
-    return screen;
+    return (
+      <div className="screen result">
+        <h1>Analysis result</h1>
+        <ResultView result={result} />
+      </div>
+    );
   }
 
   function renderHistory() {
-    const screen = div("screen");
-    screen.append(el("h1", "Analysis History"));
-    screen.append(el("p", "Your recent analyses are stored here for quick reference.", "muted"));
-    if (state.history.length === 0) {
-      screen.append(renderEmptyState("No history yet", "Completed analyses will appear here for quick review."));
-      return screen;
+    if (historyList.length === 0) {
+      return (
+        <div className="screen">
+          <h1>Analysis History</h1>
+          <p className="muted">Your recent analyses are stored here for quick reference.</p>
+          <EmptyState title="No history yet" message="Completed analyses will appear here for quick review." />
+        </div>
+      );
     }
-    const list = div("history-list");
-    for (const item of state.history) {
-      const card = div("history-card panel");
-      card.append(el("p", item.finalVerdict || "Unknown verdict", "eyebrow"));
-      card.append(el("h3", item.analysisId || "Untitled analysis"));
-      if (item.confidence) {
-        card.append(el("p", `Confidence: ${item.confidence}`, "muted"));
-      }
-      if (item.timestamp) {
-        card.append(el("p", new Date(item.timestamp).toLocaleString(), "muted"));
-      }
-      const viewButton = button("View result", () => {
-        state.result = item;
-        state.route = "result";
-        draw();
-      });
-      card.append(viewButton);
-      list.append(card);
-    }
-    screen.append(list);
-    return screen;
+    
+    return (
+      <div className="screen">
+        <h1>Analysis History</h1>
+        <p className="muted">Your recent analyses are stored here for quick reference.</p>
+        <div className="history-list">
+          {historyList.map((item: any, index: number) => (
+            <div key={index} className="history-card panel">
+              <p className="eyebrow">{item.finalVerdict || "Unknown verdict"}</p>
+              <h3>{item.analysisId || "Untitled analysis"}</h3>
+              {item.confidence && <p className="muted">Confidence: {item.confidence}</p>}
+              {item.timestamp && <p className="muted">{new Date(item.timestamp).toLocaleString()}</p>}
+              <button onClick={() => {
+                setAnalysisResult(item);
+                setRoute("result");
+              }}>View result</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   function renderReport() {
-    const screen = div("screen");
-    screen.append(el("h1", "Analysis Report"));
-    if (!state.result) {
-      screen.append(renderEmptyState("No analysis data", "Run an analysis to generate a detailed report."));
-      return screen;
-    }
-    const report = div("report-container");
-    
-    // Summary section
-    const summary = div("panel");
-    summary.append(el("h3", "Summary"));
-    summary.append(el("p", `Verdict: ${state.result.final_verdict || "Unknown"}`));
-    summary.append(el("p", `Confidence: ${state.result.confidence || "N/A"}`));
-    if (state.result.reason) {
-      summary.append(el("p", state.result.reason, "muted"));
-    }
-    report.append(summary);
-    
-    // Technical details section
-    const technical = div("panel");
-    technical.append(el("h3", "Technical Details"));
-    const details = div("technical-details");
-    
-    if (state.result.analysis_id) {
-      details.append(el("p", `Analysis ID: ${state.result.analysis_id}`, "muted"));
-    }
-    if (state.result.timestamp) {
-      details.append(el("p", `Analyzed: ${new Date(state.result.timestamp).toLocaleString()}`, "muted"));
-    }
-    if (state.result.style_signal) {
-      details.append(el("p", `Style Signal: ${state.result.style_signal}`, "muted"));
-    }
-    if (state.result.style_confidence) {
-      details.append(el("p", `Style Confidence: ${(state.result.style_confidence * 100).toFixed(1)}%`, "muted"));
-    }
-    technical.append(details);
-    report.append(technical);
-    
-    // Claims section
-    if (state.result.claims && state.result.claims.length > 0) {
-      const claims = div("panel");
-      claims.append(el("h3", `Claims Checked (${state.result.claims.length})`));
-      const claimsList = div("claims-list");
-      state.result.claims.forEach((claim, index) => {
-        const claimItem = div("claim-item");
-        claimItem.append(el("p", `Claim ${index + 1}`, "eyebrow"));
-        claimItem.append(el("p", claim.claim_text || "No text"));
-        claimItem.append(el("p", `Status: ${claim.verification_status || "Unknown"}`, "muted"));
-        claimsList.append(claimItem);
-      });
-      claims.append(claimsList);
-      report.append(claims);
+    if (!result) {
+      return (
+        <div className="screen">
+          <h1>Analysis Report</h1>
+          <EmptyState title="No analysis data" message="Run an analysis to generate a detailed report." />
+        </div>
+      );
     }
     
-    // Sources section
-    if (state.result.sources && state.result.sources.length > 0) {
-      const sources = div("panel");
-      sources.append(el("h3", `Sources Reviewed (${state.result.sources.length})`));
-      const sourcesList = div("sources-list");
-      state.result.sources.forEach((source, index) => {
-        const sourceItem = div("source-item");
-        sourceItem.append(el("p", `Source ${index + 1}`, "eyebrow"));
-        sourceItem.append(el("p", source.title || "Untitled"));
-        if (source.publisher) {
-          sourceItem.append(el("p", source.publisher, "muted"));
-        }
-        sourcesList.append(sourceItem);
-      });
-      sources.append(sourcesList);
-      report.append(sources);
-    }
-    
-    screen.append(report);
-    return screen;
+    return (
+      <div className="screen">
+        <h1>Analysis Report</h1>
+        <div className="report-container">
+          <div className="panel">
+            <h3>Summary</h3>
+            <p>Verdict: {result.final_verdict || "Unknown"}</p>
+            <p>Confidence: {result.confidence || "N/A"}</p>
+            {result.reason && <p className="muted">{result.reason}</p>}
+          </div>
+          
+          <div className="panel">
+            <h3>Technical Details</h3>
+            <div className="technical-details">
+              {result.analysis_id && <p className="muted">Analysis ID: {result.analysis_id}</p>}
+              {result.timestamp && <p className="muted">Analyzed: {new Date(result.timestamp).toLocaleString()}</p>}
+              {result.style_signal && <p className="muted">Style Signal: {result.style_signal}</p>}
+              {result.style_confidence && <p className="muted">Style Confidence: {(result.style_confidence * 100).toFixed(1)}%</p>}
+            </div>
+          </div>
+          
+          {result.claims && result.claims.length > 0 && (
+            <div className="panel">
+              <h3>Claims Checked ({result.claims.length})</h3>
+              <div className="claims-list">
+                {result.claims.map((claim: any, index: number) => (
+                  <div key={index} className="claim-item">
+                    <p className="eyebrow">Claim {index + 1}</p>
+                    <p>{claim.claim_text || "No text"}</p>
+                    <p className="muted">Status: {claim.verification_status || "Unknown"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {result.sources && result.sources.length > 0 && (
+            <div className="panel">
+              <h3>Sources Reviewed ({result.sources.length})</h3>
+              <div className="sources-list">
+                {result.sources.map((source: any, index: number) => (
+                  <div key={index} className="source-item">
+                    <p className="eyebrow">Source {index + 1}</p>
+                    <p>{source.title || "Untitled"}</p>
+                    {source.publisher && <p className="muted">{source.publisher}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   function renderReview() {
-    const screen = div("screen");
-    screen.append(el("h1", "Review"));
-    screen.append(el("p", state.session ? "Reviewer shell active" : "Sign in to review.", "muted"));
-    return screen;
+    return (
+      <div className="screen">
+        <h1>Review</h1>
+        <p className="muted">{session ? "Reviewer shell active" : "Sign in to review."}</p>
+      </div>
+    );
   }
 
   function renderAdmin() {
-    const screen = div("screen");
-    screen.append(el("h1", "Admin"));
-    screen.append(el("p", "Administration shell for future RBAC and tenant controls.", "muted"));
-    return screen;
+    return (
+      <div className="screen">
+        <h1>Admin</h1>
+        <p className="muted">Administration shell for future RBAC and tenant controls.</p>
+      </div>
+    );
   }
 
   function renderAuth() {
-    const screen = div("screen");
-    screen.append(el("h1", "Auth"));
-    screen.append(state.session ? el("p", `Signed in as ${state.session.user.name}`) : el("p", "No active session.", "muted"));
-    screen.append(button("Sign in", actions.signIn), button("Sign out", actions.signOut));
-    return screen;
+    return (
+      <div className="screen">
+        <h1>Auth</h1>
+        {session ? <p>Signed in as {session.user.name}</p> : <p className="muted">No active session.</p>}
+        <button onClick={actions.signIn}>Sign in</button>
+        <button onClick={actions.signOut}>Sign out</button>
+      </div>
+    );
   }
 
   function renderDiagnostics() {
-    const screen = div("screen");
-    screen.append(el("h1", "System Diagnostics"));
-    screen.append(el("p", "Check the health and status of the backend services.", "muted"));
-    screen.append(button("Refresh diagnostics", actions.diagnostics));
-    
-    if (!state.diagnostics) {
-      screen.append(renderEmptyState("No diagnostics data", "Click refresh to check system status."));
-      return screen;
-    }
-    
-    const container = div("diagnostics-container");
-    
-    // Backend status
-    if (state.diagnostics.backend) {
-      const backendPanel = div("panel");
-      backendPanel.append(el("h3", "Backend Status"));
-      const backendStatus = state.diagnostics.backend.state || "unknown";
-      const statusColor = backendStatus === "ready" ? "var(--accent)" : backendStatus === "error" ? "var(--danger)" : "var(--muted)";
-      backendPanel.append(el("p", `Status: ${backendStatus.toUpperCase()}`, "muted"));
-      backendPanel.append(el("p", `Version: ${state.diagnostics.backend.version || "Unknown"}`, "muted"));
-      if (state.diagnostics.backend.uptime) {
-        backendPanel.append(el("p", `Uptime: ${state.diagnostics.backend.uptime}`, "muted"));
-      }
-      container.append(backendPanel);
-    }
-    
-    // Live service status
-    if (state.diagnostics.live) {
-      const livePanel = div("panel");
-      livePanel.append(el("h3", "Live OCR Service"));
-      livePanel.append(el("p", `Status: ${state.diagnostics.live.status || "Unknown"}`, "muted"));
-      if (state.diagnostics.live.message) {
-        livePanel.append(el("p", state.diagnostics.live.message, "muted"));
-      }
-      container.append(livePanel);
-    }
-    
-    // Ready service status
-    if (state.diagnostics.ready) {
-      const readyPanel = div("panel");
-      readyPanel.append(el("h3", "API Readiness"));
-      readyPanel.append(el("p", `Status: ${state.diagnostics.ready.status || "Unknown"}`, "muted"));
-      if (state.diagnostics.ready.message) {
-        readyPanel.append(el("p", state.diagnostics.ready.message, "muted"));
-      }
-      container.append(readyPanel);
-    }
-    
-    // Available models
-    if (state.diagnostics.models && Array.isArray(state.diagnostics.models)) {
-      const modelsPanel = div("panel");
-      modelsPanel.append(el("h3", `Available Models (${state.diagnostics.models.length})`));
-      const modelsList = div("models-list");
-      state.diagnostics.models.forEach((model, index) => {
-        const modelItem = div("model-item");
-        modelItem.append(el("p", `Model ${index + 1}`, "eyebrow"));
-        modelItem.append(el("p", model.name || "Unnamed model"));
-        if (model.type) {
-          modelItem.append(el("p", model.type, "muted"));
-        }
-        modelsList.append(modelItem);
-      });
-      modelsPanel.append(modelsList);
-      container.append(modelsPanel);
-    }
-    
-    screen.append(container);
-    return screen;
+    return (
+      <div className="screen">
+        <h1>System Diagnostics</h1>
+        <p className="muted">Check the health and status of the backend services.</p>
+        <button onClick={actions.diagnostics}>Refresh diagnostics</button>
+        
+        {!diagnostics ? (
+          <EmptyState title="No diagnostics data" message="Click refresh to check system status." />
+        ) : (
+          <div className="diagnostics-container">
+            {diagnostics.backend && (
+              <div className="panel">
+                <h3>Backend Status</h3>
+                <p className="muted">Status: {(diagnostics.backend.state || "unknown").toUpperCase()}</p>
+                <p className="muted">Version: {diagnostics.backend.version || "Unknown"}</p>
+                {diagnostics.backend.uptime && <p className="muted">Uptime: {diagnostics.backend.uptime}</p>}
+              </div>
+            )}
+            
+            {diagnostics.live && (
+              <div className="panel">
+                <h3>Live OCR Service</h3>
+                <p className="muted">Status: {diagnostics.live.status || "Unknown"}</p>
+                {diagnostics.live.message && <p className="muted">{diagnostics.live.message}</p>}
+              </div>
+            )}
+            
+            {diagnostics.ready && (
+              <div className="panel">
+                <h3>API Readiness</h3>
+                <p className="muted">Status: {diagnostics.ready.status || "Unknown"}</p>
+                {diagnostics.ready.message && <p className="muted">{diagnostics.ready.message}</p>}
+              </div>
+            )}
+            
+            {diagnostics.models && Array.isArray(diagnostics.models) && (
+              <div className="panel">
+                <h3>Available Models ({diagnostics.models.length})</h3>
+                <div className="models-list">
+                  {diagnostics.models.map((model: any, index: number) => (
+                    <div key={index} className="model-item">
+                      <p className="eyebrow">Model {index + 1}</p>
+                      <p>{model.name || "Unnamed model"}</p>
+                      {model.type && <p className="muted">{model.type}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
-
-  draw();
-  actions.checkConnection();
-  return { state, actions, client, auth };
 }
 
-function liveStatusText(live) {
-  const labels = {
+function liveStatusText(live: any) {
+  const labels: Record<string, string> = {
     awaiting_permission: "Waiting for screen access.",
     capturing: live && live.stable_text ? "Text detected. Ready to verify." : "Looking for readable text.",
     paused: "Live OCR is paused.",
@@ -524,7 +595,7 @@ function liveStatusText(live) {
   return labels[live && live.status] || "Preparing Live OCR.";
 }
 
-function normalizeUiError(error) {
+function normalizeUiError(error: any) {
   return {
     code: error && error.code ? error.code : "WEB_ERROR",
     message: error && error.message ? error.message : "Web operation failed.",
