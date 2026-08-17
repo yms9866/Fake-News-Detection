@@ -11,10 +11,14 @@ import numpy as np
 import torch
 from transformers import Trainer, TrainingArguments, DataCollatorWithPadding
 
-from src.data_loader import load_fake_news_dataset
-from src.evaluate import evaluate_predictions, print_metrics
-from src.model import build_pipeline, save_model
-from src.preprocess import TransformerPreprocessor
+from packages.ml import (
+    TransformerPreprocessor,
+    build_pipeline,
+    evaluate_predictions,
+    load_fake_news_dataset,
+    print_metrics,
+    save_model,
+)
 
 
 def parse_args() -> argparse.Namespace:

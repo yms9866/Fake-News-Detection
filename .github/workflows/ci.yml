@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi uvicorn pydantic pytest httpx ruff black pillow beautifulsoup4 requests numpy python-multipart
+      - name: Ruff
+        run: python -m ruff check apps packages tests
+      - name: Pytest
+        env:
+          PYTHONPATH: .
+        run: python -m pytest tests -q
+
+  clients:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm -r --if-present lint
+      - run: pnpm -r --if-present test

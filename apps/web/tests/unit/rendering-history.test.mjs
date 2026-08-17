@@ -58,7 +58,9 @@ test("history can be cleared", () => {
 });
 
 test("result UI keeps safe link attributes and style disclaimer", async () => {
-  const source = await readFile(new URL("../../src/components/result-view.ts", import.meta.url), "utf8");
+  const resultSource = await readFile(new URL("../../src/components/result-view.tsx", import.meta.url), "utf8");
+  const chipSource = await readFile(new URL("../../src/components/source-chip.tsx", import.meta.url), "utf8");
+  const source = resultSource + chipSource;
   assert.match(source, /target\s*=\s*"_blank"/u);
   assert.match(source, /rel\s*=\s*"noopener noreferrer"/u);
   assert.match(source, /Writing style alone cannot establish whether the claims are true or false\./u);
@@ -68,8 +70,8 @@ test("result UI keeps safe link attributes and style disclaimer", async () => {
 });
 
 test("error UI is accessible and retry is explicit", async () => {
-  const source = await readFile(new URL("../../src/components/status-panels.ts", import.meta.url), "utf8");
-  assert.match(source, /role", "alert"/u);
+  const source = await readFile(new URL("../../src/components/status-panels.tsx", import.meta.url), "utf8");
+  assert.match(source, /role.*alert/u);
   assert.match(source, /Retry request/u);
   assert.equal(source.includes("Technical details"), false);
 });

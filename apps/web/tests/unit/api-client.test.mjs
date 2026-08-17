@@ -101,7 +101,7 @@ test("connection refusal is not reported as an HTTP error", async () => {
     const client = new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" });
     await assert.rejects(
       () => client.live(),
-      (error) => error instanceof WebClientError && error.code === "WEB_CONNECTION_REFUSED"
+      (error) => error instanceof WebClientError && error.code === "FND_CONNECTION_REFUSED"
     );
   });
 });
@@ -114,14 +114,14 @@ test("timeouts and malformed responses get stable error codes", async () => {
   }, async () => {
     await assert.rejects(
       () => new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" }).live(),
-      (error) => error instanceof WebClientError && error.code === "WEB_REQUEST_TIMEOUT"
+      (error) => error instanceof WebClientError && error.code === "FND_REQUEST_TIMEOUT"
     );
   });
 
   await withFetch(async () => response(null, 200), async () => {
     await assert.rejects(
       () => new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" }).live(),
-      (error) => error instanceof WebClientError && error.code === "WEB_MALFORMED_RESPONSE"
+      (error) => error instanceof WebClientError && error.code === "FND_MALFORMED_RESPONSE"
     );
   });
 });
@@ -174,13 +174,13 @@ test("live OCR web flow uses live-session endpoints", async () => {
   ]);
 });
 
-test("CSRF header is attached to mutating JSON requests", async () => {
+test("mutating JSON requests do not send CSRF headers", async () => {
   let token;
   await withFetch(async (_url, init) => {
     token = init.headers.get("X-CSRF-Token");
-    return response({ analysis_id: "csrf" });
+    return response({ analysis_id: "ok" });
   }, async () => {
-    await new WebApiClient({ backendOrigin: "http://127.0.0.1:8000", csrfToken: "csrf-token" }).analyzeText({ text: "claim" });
+    await new WebApiClient({ backendOrigin: "http://127.0.0.1:8000" }).analyzeText({ text: "claim" });
   });
-  assert.equal(token, "csrf-token");
+  assert.equal(token, null);
 });

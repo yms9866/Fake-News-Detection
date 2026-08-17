@@ -107,25 +107,16 @@ test("job cancellation calls the cancellation endpoint", async () => {
   assert.match(capturedUrl, /\/v1\/jobs\/j1\/cancel$/u);
 });
 
-test("desktop auth signs in and attaches bearer token", async () => {
-  const calls = [];
-  await withFetch(async (url, init = {}) => {
-    calls.push({ path: new URL(String(url)).pathname, headers: init.headers });
-    if (String(url).endsWith("/v1/auth/sign-in")) {
-      return response({
-        authenticated: true,
-        access_token: "desktop-token",
-        user: { user_id: "desktop-reviewer" }
-      });
-    }
-    return response({ status: "ready" });
+test("mutating JSON requests do not send auth or CSRF headers", async () => {
+  let headers;
+  await withFetch(async (_url, init = {}) => {
+    headers = init.headers;
+    return response({ analysis_id: "ok" });
   }, async () => {
-    const client = new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" });
-    await client.signIn({ username: "desktop-reviewer" });
-    await client.ready();
+    await new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" }).analyzeText({ text: "claim" });
   });
-  assert.equal(calls[0].path, "/v1/auth/sign-in");
-  assert.equal(calls[1].headers.get("Authorization"), "Bearer desktop-token");
+  assert.equal(headers.get("Authorization"), null);
+  assert.equal(headers.get("X-CSRF-Token"), null);
 });
 
 test("provider failures do not expose stack traces through client errors", async () => {
@@ -164,7 +155,7 @@ test("desktop malformed responses get a stable error", async () => {
   await withFetch(async () => response(null), async () => {
     await assert.rejects(
       () => new DesktopApiClient({ backendOrigin: "http://127.0.0.1:8000" }).live(),
-      (error) => error instanceof DesktopApiError && error.code === "DESKTOP_MALFORMED_RESPONSE"
+      (error) => error instanceof DesktopApiError && error.code === "FND_MALFORMED_RESPONSE"
     );
   });
 });

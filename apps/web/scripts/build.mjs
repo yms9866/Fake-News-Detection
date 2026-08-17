@@ -1,36 +1,38 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { build as viteBuild } from "vite";
 import * as esbuild from "esbuild";
 
 const root = join(import.meta.dirname, "..");
-const src = join(root, "src");
-const dist = join(root, "dist");
 
-await rm(dist, { recursive: true, force: true });
-await mkdir(dist, { recursive: true });
-
-// Copy static assets (HTML, CSS)
-const indexHtml = await readFile(join(src, "index.html"), "utf8");
-await writeFile(join(dist, "index.html"), indexHtml, "utf8");
-
-const stylesCss = await readFile(join(src, "styles.css"), "utf8");
-await writeFile(join(dist, "styles.css"), stylesCss, "utf8");
-
-// Build React app with esbuild
-await esbuild.build({
-  entryPoints: [join(src, "main.tsx")],
-  bundle: true,
-  outfile: join(dist, "bundle.js"),
-  format: "esm",
-  target: "es2022",
-  jsx: "automatic",
-  loader: {
-    ".ts": "tsx",
-    ".tsx": "tsx"
-  },
-  external: [],
-  sourcemap: true,
-  logLevel: "info"
+await viteBuild({ configFile: join(root, "vite.config.ts") });
+await copyFile(join(root, "dist/bundle.js"), join(root, "dist/main.js")).catch(async () => {
+  await mkdir(join(root, "dist"), { recursive: true });
 });
+
+const testEntries = [
+  "api/client.ts",
+  "api/validation.ts",
+  "capture/browser-capture.ts",
+  "security/csp.ts",
+  "stores/history-store.ts",
+  "components/safe-rendering.ts"
+];
+
+for (const relPath of testEntries) {
+  await esbuild.build({
+    entryPoints: [join(root, "src", relPath)],
+    bundle: true,
+    outfile: join(root, "dist", relPath.replace(/\.tsx?$/u, ".js")),
+    format: "esm",
+    platform: "node",
+    target: "es2022",
+    packages: "external",
+    alias: {
+      "@fnd/client-sdk": join(root, "../../packages/client-sdk/src/index.ts"),
+      "@fnd/analysis-view-model": join(root, "../../packages/analysis-view-model/src/index.ts")
+    }
+  });
+}
 
 console.log("Web build artifacts written to apps/web/dist.");

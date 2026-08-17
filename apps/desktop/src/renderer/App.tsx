@@ -19,9 +19,8 @@ const DEFAULT_SETTINGS = {
   backendOrigin: "http://127.0.0.1:8000",
   defaultDeepCheck: false,
   defaultMaxLength: 512,
-  requestTimeoutMs: 60000,
-  startupTimeoutMs: 30000,
-  authToken: ""
+  requestTimeoutMs: 600000,
+  startupTimeoutMs: 300000
 };
 
 export class DesktopInitializationError extends Error {
@@ -90,7 +89,6 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
     activeJob: null,
     liveSession: null,
     latestResult: null,
-    auth: null,
     loading: false,
     error: null
   };
@@ -236,27 +234,6 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         client.configure(state.settings);
       });
     },
-    async signIn(payload) {
-      await run(async () => {
-        const session = await client.signIn(payload);
-        state.auth = session;
-        state.settings = {
-          ...state.settings,
-          authToken: session && session.access_token ? session.access_token : ""
-        };
-        await settingsStore.save(state.settings);
-        client.configure(state.settings);
-      });
-    },
-    async signOut() {
-      await run(async () => {
-        await client.signOut();
-        state.auth = null;
-        state.settings = { ...state.settings, authToken: "" };
-        await settingsStore.save(state.settings);
-        client.configure(state.settings);
-      });
-    },
     async clearHistory() {
       await run(async () => {
         state.history = await historyStore.clear();
@@ -269,8 +246,6 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         state.latestResult = null;
         state.activeJob = null;
         state.liveSession = null;
-        state.auth = null;
-        client.setAuthToken(null);
       });
     }
   };
@@ -321,16 +296,6 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
     await run(async () => {
       state.settings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get()) };
       client.configure(state.settings);
-      if (state.settings.authToken) {
-        try {
-          state.auth = await client.restoreSession();
-        } catch {
-          state.auth = null;
-          state.settings = { ...state.settings, authToken: "" };
-          await settingsStore.save(state.settings);
-          client.configure(state.settings);
-        }
-      }
       state.history = await historyStore.list();
       await actions.refreshDiagnostics();
     });
@@ -433,10 +398,10 @@ function renderLoadingPanel() {
 }
 
 function errorTitle(code) {
-  if (code === "DESKTOP_BACKEND_UNAVAILABLE") {
+  if (code === "DESKTOP_BACKEND_UNAVAILABLE" || code === "FND_CONNECTION_REFUSED" || code === "FND_CORS_OR_NETWORK_FAILURE") {
     return "Backend unavailable";
   }
-  if (code === "DESKTOP_BACKEND_TIMEOUT") {
+  if (code === "DESKTOP_BACKEND_TIMEOUT" || code === "FND_REQUEST_TIMEOUT") {
     return "Backend request timed out";
   }
   return "Desktop operation failed";

@@ -66,35 +66,6 @@ export interface AnalyzeUrlRequest {
   max_length?: number | null;
 }
 
-export interface AuthSignInRequest {
-  username: string;
-  tenant_id?: string;
-  client_type?: string;
-}
-
-export interface AuthUserResponse {
-  user_id: string;
-  tenant_id: string;
-  roles: string[];
-}
-
-export interface AuthSessionResponse {
-  authenticated: boolean;
-  user: AuthUserResponse | null;
-  access_token: string | null;
-  token_type: "bearer";
-  expires_at: string | null;
-  request_id: string;
-  trace_id: string;
-}
-
-export interface AuthSignOutResponse {
-  signed_out: boolean;
-  message: string;
-  request_id: string;
-  trace_id: string;
-}
-
 export interface EvidenceSummaryItem {
   source_id: string;
   source_number: number;

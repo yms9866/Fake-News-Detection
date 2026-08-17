@@ -1,5 +1,4 @@
 import { MESSAGE_TYPES, assertExtensionMessage } from "../shared/messages.js";
-import { createApiClient } from "../shared/api-client.js";
 import { testConnection } from "./connection-manager.js";
 import {
   analyzeArticle,
@@ -13,7 +12,7 @@ import {
   runControllerAction,
   showLatestOverlay
 } from "./analysis-controller.js";
-import { clearExtensionState, getSettings, saveSettings } from "../shared/storage.js";
+import { clearExtensionState, saveSettings } from "../shared/storage.js";
 
 const handlers = {
   [MESSAGE_TYPES.analyzeSelection]: analyzeSelection,
@@ -26,28 +25,6 @@ const handlers = {
   [MESSAGE_TYPES.showOverlay]: showLatestOverlay,
   [MESSAGE_TYPES.openLatestReport]: openLatestReport,
   [MESSAGE_TYPES.testConnection]: testConnection,
-  [MESSAGE_TYPES.signIn]: async (payload) => {
-    const settings = await getSettings();
-    const client = createApiClient(settings);
-    const session = await client.signIn({
-      username: payload.username || "extension-reviewer"
-    });
-    await saveSettings({
-      ...settings,
-      authToken: session && session.access_token ? session.access_token : ""
-    });
-    return { ok: true, session: { ...session, access_token: null } };
-  },
-  [MESSAGE_TYPES.signOut]: async () => {
-    const settings = await getSettings();
-    const client = createApiClient(settings);
-    try {
-      await client.signOut();
-    } finally {
-      await saveSettings({ ...settings, authToken: "" });
-    }
-    return { ok: true };
-  },
   [MESSAGE_TYPES.clearState]: async () => {
     await clearExtensionState();
     return { ok: true };

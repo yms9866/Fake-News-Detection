@@ -51,7 +51,7 @@ test("client parses backend error payloads without exposing stack traces", async
   });
 
   await assert.rejects(
-    () => client.analyzeText({ text: "" }),
+    () => client.analyzeText({ text: "claim" }),
     (error) => error instanceof MobileApiError
       && error.code === "VALIDATION_ERROR"
       && error.status === 422
@@ -70,7 +70,7 @@ test("client reports network failures with a stable mobile error code", async ()
 
   await assert.rejects(
     () => client.getHealth(),
-    (error) => error instanceof MobileApiError && error.code === "MOBILE_NETWORK_UNREACHABLE"
+    (error) => error instanceof MobileApiError && error.code === "FND_CORS_OR_NETWORK_FAILURE"
   );
 });
 
@@ -86,7 +86,7 @@ test("client reports request timeout with a stable mobile error code", async () 
 
   await assert.rejects(
     () => client.getHealth(),
-    (error) => error instanceof MobileApiError && error.code === "MOBILE_REQUEST_TIMEOUT"
+    (error) => error instanceof MobileApiError && error.code === "FND_REQUEST_TIMEOUT"
   );
 });
 
@@ -106,19 +106,18 @@ test("analysis requests can use a longer timeout than health checks", async () =
   assert.equal(result.analysis_id, "slow-ok");
 });
 
-test("client redacts auth tokens from thrown request errors", async () => {
+test("client reports network failures without leaking internals as stack traces", async () => {
   const client = new MobileApiClient({
     apiUrl: "http://127.0.0.1:8000",
-    authToken: "super-secret-token",
     fetchImpl: async () => {
-      throw new Error("super-secret-token cannot connect");
+      throw new Error("connect ECONNREFUSED 127.0.0.1:8000");
     }
   });
 
   await assert.rejects(
     () => client.getHealth(),
     (error) => error instanceof MobileApiError
-      && error.code === "MOBILE_NETWORK_UNREACHABLE"
-      && !String(error.message).includes("super-secret-token")
+      && error.code === "FND_CORS_OR_NETWORK_FAILURE"
+      && !String(error.message).includes("Traceback")
   );
 });

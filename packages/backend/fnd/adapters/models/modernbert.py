@@ -12,7 +12,7 @@ from typing import Any, cast
 
 from packages.backend.fnd.domain.entities import StyleAnalysis
 from packages.backend.fnd.domain.enums import StyleRiskSignal
-from src.text_cleaning import clean_news_text
+from packages.ml import clean_news_text
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class ModernBertStyleModel:
             start = perf_counter()
             import torch
 
-            from src.model import load_model
+            from packages.ml import load_model
 
             model_obj, tokenizer_obj = load_model(self.model_path)
             model = cast(Any, model_obj)

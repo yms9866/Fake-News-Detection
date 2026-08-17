@@ -1,0 +1,38 @@
+declare module "lucide-react" {
+  import type { ComponentType, SVGProps } from "react";
+  type LucideIcon = ComponentType<SVGProps<SVGSVGElement> & { size?: string | number }>;
+  export const Activity: LucideIcon;
+  export const AlertTriangle: LucideIcon;
+  export const BarChart3: LucideIcon;
+  export const Brain: LucideIcon;
+  export const Camera: LucideIcon;
+  export const CheckCircle2: LucideIcon;
+  export const ChevronDown: LucideIcon;
+  export const ChevronRight: LucideIcon;
+  export const ChevronUp: LucideIcon;
+  export const Cpu: LucideIcon;
+  export const ExternalLink: LucideIcon;
+  export const Eye: LucideIcon;
+  export const FileText: LucideIcon;
+  export const Globe: LucideIcon;
+  export const HelpCircle: LucideIcon;
+  export const History: LucideIcon;
+  export const Inbox: LucideIcon;
+  export const Loader2: LucideIcon;
+  export const Mic: LucideIcon;
+  export const Monitor: LucideIcon;
+  export const Paperclip: LucideIcon;
+  export const PanelLeftClose: LucideIcon;
+  export const PanelLeftOpen: LucideIcon;
+  export const Radio: LucideIcon;
+  export const RefreshCw: LucideIcon;
+  export const Search: LucideIcon;
+  export const Settings: LucideIcon;
+  export const Shield: LucideIcon;
+  export const ShieldAlert: LucideIcon;
+  export const ShieldCheck: LucideIcon;
+  export const Sparkles: LucideIcon;
+  export const UploadCloud: LucideIcon;
+  export const Wifi: LucideIcon;
+  export const WifiOff: LucideIcon;
+}

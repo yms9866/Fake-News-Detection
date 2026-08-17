@@ -73,50 +73,6 @@ class ApiErrorResponse(BaseModel):
     details: list[dict[str, object]] = Field(default_factory=list)
 
 
-class AuthSignInRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    username: str = Field(min_length=1, max_length=128)
-    tenant_id: str = Field(default="local", min_length=1, max_length=128)
-    client_type: str = Field(default="web", min_length=1, max_length=64)
-
-    @field_validator("username")
-    @classmethod
-    def username_must_not_be_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("username must not be blank")
-        return value
-
-
-class AuthUserResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    user_id: str
-    tenant_id: str
-    roles: list[str] = Field(default_factory=list)
-
-
-class AuthSessionResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    authenticated: bool
-    user: AuthUserResponse | None = None
-    access_token: str | None = None
-    token_type: Literal["bearer"] = "bearer"
-    expires_at: datetime | None = None
-    request_id: str
-    trace_id: str
-
-
-class AuthSignOutResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    signed_out: bool
-    message: str
-    request_id: str
-    trace_id: str
-
-
 class AnalyzeTextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

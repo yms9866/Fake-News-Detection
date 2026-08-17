@@ -3,3 +3,13 @@ packages:
   - "apps/desktop"
   - "apps/web"
   - "apps/mobile"
+  - "packages/client-sdk"
+  - "packages/analysis-view-model"
+onlyBuiltDependencies:
+  - esbuild
+  - tesseract.js
+minimumReleaseAgeExclude:
+  - lucide-react@1.30.0
+allowBuilds:
+  esbuild: true
+  tesseract.js: true

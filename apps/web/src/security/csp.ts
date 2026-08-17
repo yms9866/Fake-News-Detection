@@ -1,10 +1,11 @@
 export const WEB_CSP = [
   "default-src 'self'",
-  "connect-src http://127.0.0.1:* http://localhost:*",
+  "connect-src http://127.0.0.1:* http://localhost:* blob:",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "style-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval' blob:",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'"

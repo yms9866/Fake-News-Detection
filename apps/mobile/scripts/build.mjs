@@ -1,49 +1,47 @@
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, extname, join, relative } from "node:path";
 import { globSync } from "node:fs";
+import * as esbuild from "esbuild";
 
 const root = join(import.meta.dirname, "..");
 const src = join(root, "src");
 const dist = join(root, "dist");
+const sdkAlias = {
+  "@fnd/client-sdk": join(root, "../../packages/client-sdk/src/index.ts"),
+  "@fnd/analysis-view-model": join(root, "../../packages/analysis-view-model/src/index.ts")
+};
 
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
-function isTypeOnly(text) {
-  return /^\s*(export\s+)?(type|interface)\s/mu.test(text);
-}
-
-function toRunnableJavaScript(text) {
-  return text
-    .replace(/(from\s+["'])(\.{1,2}\/[^"']+)(["'])/gu, (match, prefix, specifier, suffix) => {
-      return /\.[cm]?[jt]sx?$/u.test(specifier) || /\.json$/u.test(specifier)
-        ? `${prefix}${specifier.replace(/\.(ts|tsx)$/u, ".js")}${suffix}`
-        : `${prefix}${specifier}.js${suffix}`;
-    })
-    .replace(/(import\s*\(\s*["'])(\.{1,2}\/[^"']+)(["']\s*\))/gu, (match, prefix, specifier, suffix) => {
-      return /\.[cm]?[jt]sx?$/u.test(specifier) || /\.json$/u.test(specifier)
-        ? `${prefix}${specifier.replace(/\.(ts|tsx)$/u, ".js")}${suffix}`
-        : `${prefix}${specifier}.js${suffix}`;
-    });
+function needsBundle(rel) {
+  return /api\/client\.(ts|tsx)$|components\/result-view\.(ts|tsx)$/u.test(rel.replace(/\\/gu, "/"));
 }
 
 for (const file of globSync("src/**/*", { cwd: root, nodir: true })) {
   const source = join(root, file);
-  if ((await stat(source)).isDirectory()) {
-    continue;
-  }
   const extension = extname(file);
   const rel = relative(src, source);
   const output = join(dist, rel).replace(/\.(tsx|ts)$/u, ".js");
-  const text = await readFile(source, "utf8");
   await mkdir(dirname(output), { recursive: true });
   if (extension === ".ts" || extension === ".tsx") {
-    if (isTypeOnly(text)) {
+    const text = await readFile(source, "utf8");
+    if (/^\s*(export\s+)?(type|interface)\s/mu.test(text) && !text.includes("export function") && !text.includes("export class") && !text.includes("export const") && !text.includes("export default")) {
       continue;
     }
-    await writeFile(output, toRunnableJavaScript(text), "utf8");
+    const bundle = needsBundle(rel);
+    await esbuild.build({
+      entryPoints: [source],
+      outfile: output,
+      format: "esm",
+      platform: "neutral",
+      bundle,
+      alias: bundle ? sdkAlias : undefined,
+      jsx: "automatic",
+      logLevel: "warning"
+    });
   } else if (extension === ".json") {
-    await writeFile(join(dist, rel), text, "utf8");
+    await writeFile(join(dist, rel), await readFile(source, "utf8"), "utf8");
   }
 }
 

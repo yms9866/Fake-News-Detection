@@ -1,12 +1,16 @@
-import React, { useState } from "react";
+import React from "react";
 import { evidenceLinkDescriptor, textOnly } from "./safe-rendering.js";
+import { Globe, ExternalLink, ShieldCheck, ShieldAlert, FileText } from "lucide-react";
+import { motion } from "framer-motion";
 
 export function SourceChip({ item, onClick }: { item: any; onClick?: (item: any, descriptor: any) => void }) {
   const descriptor = evidenceLinkDescriptor(item);
   const firstLetter = (descriptor.domain || descriptor.publisher || "U").charAt(0).toUpperCase();
   
   return (
-    <div
+    <motion.div
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
       className="source-chip"
       style={{ cursor: onClick ? "pointer" : "default" }}
       onClick={() => onClick?.(item, descriptor)}
@@ -15,44 +19,54 @@ export function SourceChip({ item, onClick }: { item: any; onClick?: (item: any,
       <div className="source-icon">{firstLetter}</div>
       <span className="source-domain">{descriptor.domain || descriptor.publisher || "Unknown"}</span>
       <div className={`reliability-dot reliability-${getReliabilityClass(descriptor.reliability)}`} />
-    </div>
+    </motion.div>
   );
 }
 
 export function SourceDetail({ item, descriptor }: { item: any; descriptor: any }) {
   return (
-    <div className="source-detail panel">
-      <h4>{descriptor.title}</h4>
-      <p className="muted">{descriptor.publisher || descriptor.domain || "Unknown publisher"}</p>
-      
-      <div className={`badge stance-badge stance-${getStanceClass(descriptor.stance)}`}>
-        {stanceLabel(descriptor.stance)}
+    <motion.div 
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="source-detail panel"
+    >
+      <div className="source-detail-header" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <Globe size={18} style={{ color: "var(--accent-primary)" }} />
+        <h4 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{descriptor.title}</h4>
       </div>
-      <div className="badge">{sourceTypeLabel(descriptor.sourceType)}</div>
+      <p className="muted" style={{ marginBottom: 12 }}>{descriptor.publisher || descriptor.domain || "Unknown publisher"}</p>
       
-      <div className="reliability-wrapper">
-        <div className={`reliability-dot reliability-${getReliabilityClass(descriptor.reliability)}`} />
-        <span className="muted">{descriptor.reliability} reliability</span>
+      <div className="badge-list" style={{ marginBottom: 16 }}>
+        <div className={`badge stance-badge stance-${getStanceClass(descriptor.stance)}`}>
+          {stanceLabel(descriptor.stance)}
+        </div>
+        <div className="badge">{sourceTypeLabel(descriptor.sourceType)}</div>
+        <div className="badge">
+          <div className={`reliability-dot reliability-${getReliabilityClass(descriptor.reliability)}`} style={{ marginRight: 4 }} />
+          <span>{descriptor.reliability} reliability</span>
+        </div>
       </div>
       
-      {descriptor.fetched && <p className="muted">Gemini returned this via Google Search grounding</p>}
-      {item.fetch_message && <p className="muted">{textOnly(item.fetch_message)}</p>}
-      {item.qualification_explanation && <p className="muted">{textOnly(item.qualification_explanation)}</p>}
+      {descriptor.fetched && <p className="muted" style={{ marginBottom: 8 }}>Gemini returned this via Google Search grounding</p>}
+      {item.fetch_message && <p className="muted" style={{ marginBottom: 8 }}>{textOnly(item.fetch_message)}</p>}
+      {item.qualification_explanation && <p className="muted" style={{ marginBottom: 12 }}>{textOnly(item.qualification_explanation)}</p>}
       
       {descriptor.url ? (
         <a
           href={descriptor.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="button link-button"
+          className="button primary compact"
           aria-label={`Open ${descriptor.citationLabel}: ${descriptor.title}`}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
-          Open source
+          <span>Open source</span>
+          <ExternalLink size={14} />
         </a>
       ) : (
         <p className="muted">No safe source link available.</p>
       )}
-    </div>
+    </motion.div>
   );
 }
 

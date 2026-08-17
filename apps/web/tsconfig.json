@@ -8,7 +8,12 @@
     "allowJs": false,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@fnd/client-sdk": ["../../packages/client-sdk/src/index.ts"],
+      "@fnd/analysis-view-model": ["../../packages/analysis-view-model/src/index.ts"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.mjs"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "vite.config.ts"]
 }

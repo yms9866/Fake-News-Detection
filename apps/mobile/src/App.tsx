@@ -11,6 +11,7 @@ import {
   TextInput,
   View
 } from "react-native";
+import { toAnalysisDisplayModel } from "@fnd/analysis-view-model";
 import { MobileApiClient, MobileApiError } from "./api/client";
 import { normalizeApiUrl, resolveApiUrl } from "./config/api";
 
@@ -36,7 +37,6 @@ export const MOBILE_SCREENS = [
 ];
 
 const DEFAULT_API_URL = resolveApiUrl({ platform: Platform.OS });
-const h = React.createElement;
 
 export function createMobileAppShell() {
   return {
@@ -47,7 +47,7 @@ export function createMobileAppShell() {
   };
 }
 
-function cleanOrigin(origin) {
+function cleanOrigin(origin: string) {
   try {
     return normalizeApiUrl(origin || DEFAULT_API_URL);
   } catch {
@@ -55,126 +55,84 @@ function cleanOrigin(origin) {
   }
 }
 
-function valueOrDash(value) {
+function valueOrDash(value: unknown) {
   return value === null || value === undefined || value === "" ? "-" : String(value);
 }
 
-function fallbackStyleText(signal) {
-  if (signal === "LOW_STYLE_RISK") {
-    return "The writing style seems similar to real or legitimate news reporting.";
-  }
-  if (signal === "HIGH_STYLE_RISK") {
-    return "The writing style seems similar to fake, misleading, or fabricated content.";
-  }
-  return "The writing-style assessment is unavailable.";
-}
-
-function fallbackStyleConfidence(confidence) {
-  if (confidence === null || confidence === undefined) {
-    return "N/A";
-  }
-  if (confidence >= 0.9995) {
-    return ">99.9%";
-  }
-  const bounded = Math.max(0, Math.min(Number(confidence), 0.999));
-  return `${(bounded * 100).toFixed(1)}%`;
-}
-
-function verdictTone(verdict) {
-  const normalized = String(verdict || "").toUpperCase();
-  if (normalized === "REAL") {
-    return styles.realTone;
-  }
-  if (normalized === "FAKE") {
-    return styles.fakeTone;
-  }
-  if (normalized === "UNVERIFIED") {
-    return styles.unverifiedTone;
-  }
-  return styles.neutralTone;
-}
-
-function Button(props) {
-  const disabled = props.disabled;
-  return h(
-    Pressable,
-    {
-      accessibilityRole: "button",
-      disabled,
-      onPress: props.onPress,
-      style: ({ pressed }) => [
+function Button({
+  label,
+  onPress,
+  secondary = false,
+  disabled = false
+}: {
+  label: string;
+  onPress: () => void;
+  secondary?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
         styles.button,
-        props.secondary ? styles.secondaryButton : styles.primaryButton,
+        secondary ? styles.secondaryButton : styles.primaryButton,
         disabled ? styles.disabledButton : null,
         pressed && !disabled ? styles.pressedButton : null
-      ]
-    },
-    h(Text, { style: [styles.buttonText, props.secondary ? styles.secondaryButtonText : null] }, props.label)
+      ]}
+    >
+      <Text style={[styles.buttonText, secondary ? styles.secondaryButtonText : null]}>{label}</Text>
+    </Pressable>
   );
 }
 
-function FieldLabel(props) {
-  return h(Text, { style: styles.label }, props.children);
-}
-
-function ResultPanel({ result }) {
-  if (!result) {
+function ResultPanel({ result }: { result: Record<string, unknown> | null }) {
+  const display = toAnalysisDisplayModel(result);
+  if (!display) {
     return null;
   }
-
-  const evidence = result.verification && Array.isArray(result.verification.evidence)
-    ? result.verification.evidence.slice(0, 3)
-    : [];
-  const claims = Array.isArray(result.claims) ? result.claims.slice(0, 3) : [];
-  const reviewedSources = Array.isArray(result.sources) ? result.sources.slice(0, 3) : [];
-  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
-  const styleAssessment = result.style_assessment || {};
-  const styleText = styleAssessment.display_text || fallbackStyleText(result.style_signal);
-  const styleConfidence = styleAssessment.display_confidence || fallbackStyleConfidence(result.style_confidence);
-
-  return h(
-    View,
-    { style: styles.panel },
-    h(View, { style: styles.resultHeader },
-      h(Text, { style: styles.panelTitle }, "Result"),
-      h(Text, { style: [styles.verdict, verdictTone(result.final_verdict)] }, valueOrDash(result.final_verdict))
-    ),
-    h(View, { style: styles.metricRow },
-      h(Text, { style: styles.metricLabel }, "Confidence"),
-      h(Text, { style: styles.metricValue }, valueOrDash(result.confidence))
-    ),
-    h(View, { style: styles.metricRow },
-      h(Text, { style: styles.metricLabel }, "Style signal strength"),
-      h(Text, { style: styles.metricValue }, styleConfidence)
-    ),
-    h(Text, { style: styles.meta }, valueOrDash(styleText)),
-    h(View, { style: styles.metricRow },
-      h(Text, { style: styles.metricLabel }, "Claims checked"),
-      h(Text, { style: styles.metricValue }, String(Array.isArray(result.claims) ? result.claims.length : 0))
-    ),
-    h(View, { style: styles.metricRow },
-      h(Text, { style: styles.metricLabel }, "Reviewed sources"),
-      h(Text, { style: styles.metricValue }, String(Array.isArray(result.sources) ? result.sources.length : evidence.length))
-    ),
-    h(Text, { style: styles.reason }, valueOrDash(result.reason)),
-    claims.length > 0 ? h(View, { style: styles.evidenceList },
-      claims.map((claim, index) => h(Text, { key: `${claim.claim_id || index}`, style: styles.evidenceItem },
-        `${index + 1}. ${valueOrDash(claim.verification_status)} - ${valueOrDash(claim.claim_text)}`
-      ))
-    ) : null,
-    reviewedSources.length > 0 ? h(View, { style: styles.evidenceList },
-      reviewedSources.map((item, index) => h(Text, { key: `${item.source_id || item.url || index}`, style: styles.evidenceItem },
-        `${index + 1}. ${valueOrDash(item.title || item.url)}`
-      ))
-    ) : evidence.length > 0 ? h(View, { style: styles.evidenceList },
-      evidence.map((item, index) => h(Text, { key: `${item.url || item.title || index}`, style: styles.evidenceItem },
-        `${index + 1}. ${valueOrDash(item.title || item.url)}`
-      ))
-    ) : null,
-    warnings.length > 0 ? h(View, { style: styles.warningList },
-      warnings.map((warning, index) => h(Text, { key: `${warning}-${index}`, style: styles.warningItem }, warning))
-    ) : null
+  const claims = Array.isArray(display.claims) ? display.claims.slice(0, 3) : [];
+  const sources = Array.isArray(display.sources) ? display.sources.slice(0, 3) : [];
+  return (
+    <View style={styles.panel}>
+      <View style={styles.resultHeader}>
+        <Text style={styles.panelTitle}>Result</Text>
+        <Text style={[styles.verdict, verdictTone(display.finalVerdict)]}>{valueOrDash(display.finalVerdict)}</Text>
+      </View>
+      <View style={styles.metricRow}>
+        <Text style={styles.metricLabel}>Confidence</Text>
+        <Text style={styles.metricValue}>{valueOrDash(display.confidence)}</Text>
+      </View>
+      <View style={styles.metricRow}>
+        <Text style={styles.metricLabel}>Style signal</Text>
+        <Text style={styles.metricValue}>{valueOrDash(display.styleSignal)}</Text>
+      </View>
+      <Text style={styles.meta}>{display.styleLimitation}</Text>
+      <Text style={styles.reason}>{valueOrDash(display.reason)}</Text>
+      {claims.map((claim, index) => (
+        <Text key={index} style={styles.evidenceItem}>
+          {`${index + 1}. ${valueOrDash((claim as { verification_status?: string }).verification_status)} - ${valueOrDash((claim as { claim_text?: string }).claim_text)}`}
+        </Text>
+      ))}
+      {sources.map((item, index) => (
+        <Text key={index} style={styles.evidenceItem}>
+          {`${index + 1}. ${valueOrDash((item as { title?: string; url?: string }).title || (item as { url?: string }).url)}`}
+        </Text>
+      ))}
+      {display.warnings.map((warning, index) => (
+        <Text key={`${warning}-${index}`} style={styles.warningItem}>{warning}</Text>
+      ))}
+    </View>
   );
+}
+
+function verdictTone(verdict: string) {
+  const normalized = String(verdict || "").toUpperCase();
+  if (normalized === "REAL") return styles.realTone;
+  if (normalized === "FAKE") return styles.fakeTone;
+  if (normalized === "UNVERIFIED") return styles.unverifiedTone;
+  return styles.neutralTone;
 }
 
 export default function App() {
@@ -185,11 +143,8 @@ export default function App() {
   const [deepCheck, setDeepCheck] = useState(true);
   const [maxLength, setMaxLength] = useState("512");
   const [backendStatus, setBackendStatus] = useState("Not checked");
-  const [authUsername, setAuthUsername] = useState("mobile-reviewer");
-  const [authStatus, setAuthStatus] = useState("Not signed in");
-  const [authToken, setAuthToken] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState("");
 
   const activeInput = mode === "text" ? text : url;
@@ -207,52 +162,20 @@ export default function App() {
     }
   }
 
-  async function signIn() {
-    setError("");
-    try {
-      const client = new MobileApiClient({ apiUrl: origin, authToken });
-      const session = await client.signIn({ username: authUsername });
-      setAuthToken(session && session.access_token ? session.access_token : "");
-      setAuthStatus(session && session.user ? `Signed in as ${session.user.user_id}` : "Signed in");
-    } catch (caught) {
-      setAuthStatus("Not signed in");
-      setError(caught instanceof Error ? caught.message : "Sign in failed.");
-    }
-  }
-
-  async function signOut() {
-    setError("");
-    try {
-      const client = new MobileApiClient({ apiUrl: origin, authToken });
-      await client.signOut();
-    } catch {
-      // Local cleanup still matters if the backend is temporarily unavailable.
-    } finally {
-      setAuthToken("");
-      setAuthStatus("Signed out");
-    }
-  }
-
   async function runAnalysis() {
     const trimmed = String(activeInput || "").trim();
     if (!trimmed) {
       setError(mode === "text" ? "Text is required." : "URL is required.");
       return;
     }
-
     setLoading(true);
     setError("");
     setResult(null);
-
-    const body = mode === "text"
-      ? { text: trimmed, deep_check: deepCheck, max_length: Number(maxLength) || 512 }
-      : { url: trimmed, deep_check: deepCheck, max_length: Number(maxLength) || 512 };
-
     try {
-      const client = new MobileApiClient({ apiUrl: origin, authToken });
+      const client = new MobileApiClient({ apiUrl: origin });
       const payload = mode === "text"
-        ? await client.analyzeText(body)
-        : await client.analyzeUrl(body);
+        ? await client.analyzeText({ text: trimmed, deep_check: deepCheck, max_length: Number(maxLength) || 512 })
+        : await client.analyzeUrl({ url: trimmed, deep_check: deepCheck, max_length: Number(maxLength) || 512 });
       setResult(payload);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Backend request failed.");
@@ -261,138 +184,99 @@ export default function App() {
     }
   }
 
-  return h(
-    SafeAreaView,
-    { style: styles.safeArea },
-    h(ScrollView, { keyboardShouldPersistTaps: "handled", contentContainerStyle: styles.container },
-      h(View, { style: styles.header },
-        h(Text, { style: styles.eyebrow }, "FAKE NEWS PLATFORM"),
-        h(Text, { style: styles.title }, "Mobile Analysis"),
-        h(Text, { style: styles.status }, `Backend: ${backendStatus}`)
-      ),
-      h(View, { style: styles.panel },
-        h(FieldLabel, null, "Backend URL"),
-        h(TextInput, {
-          autoCapitalize: "none",
-          autoCorrect: false,
-          inputMode: "url",
-          onChangeText: setBackendOrigin,
-          style: styles.input,
-          value: backendOrigin
-        }),
-        h(Button, { label: "Check Backend", onPress: checkBackend, secondary: true })
-      ),
-      h(View, { style: styles.panel },
-        h(FieldLabel, null, "Reviewer"),
-        h(TextInput, {
-          autoCapitalize: "none",
-          autoCorrect: false,
-          onChangeText: setAuthUsername,
-          placeholder: "mobile-reviewer",
-          placeholderTextColor: "#7a8178",
-          style: styles.input,
-          value: authUsername
-        }),
-        h(Text, { style: styles.meta }, authStatus),
-        h(View, { style: styles.actionsRow },
-          h(Button, { label: "Sign in", onPress: signIn, secondary: true }),
-          h(Button, { label: "Sign out", onPress: signOut, secondary: true })
-        )
-      ),
-      h(View, { style: styles.segment },
-        h(Pressable, {
-          accessibilityRole: "button",
-          onPress: () => setMode("text"),
-          style: [styles.segmentItem, mode === "text" ? styles.segmentActive : null]
-        }, h(Text, { style: [styles.segmentText, mode === "text" ? styles.segmentTextActive : null] }, "Text")),
-        h(Pressable, {
-          accessibilityRole: "button",
-          onPress: () => setMode("url"),
-          style: [styles.segmentItem, mode === "url" ? styles.segmentActive : null]
-        }, h(Text, { style: [styles.segmentText, mode === "url" ? styles.segmentTextActive : null] }, "URL"))
-      ),
-      h(View, { style: styles.panel },
-        h(FieldLabel, null, mode === "text" ? "Claim Text" : "Article URL"),
-        h(TextInput, {
-          autoCapitalize: "none",
-          autoCorrect: false,
-          inputMode: mode === "text" ? "text" : "url",
-          multiline: mode === "text",
-          onChangeText: mode === "text" ? setText : setUrl,
-          placeholder: mode === "text" ? "Paste a claim" : "https://example.com/article",
-          placeholderTextColor: "#7a8178",
-          style: [styles.input, mode === "text" ? styles.textArea : null],
-          value: mode === "text" ? text : url
-        }),
-        h(View, { style: styles.optionsRow },
-          h(View, { style: styles.switchRow },
-            h(Text, { style: styles.optionText }, "Deep check"),
-            h(Switch, { value: deepCheck, onValueChange: setDeepCheck })
-          ),
-          h(View, { style: styles.maxLengthGroup },
-            h(Text, { style: styles.optionText }, "Max"),
-            h(TextInput, {
-              inputMode: "numeric",
-              keyboardType: "number-pad",
-              onChangeText: setMaxLength,
-              style: styles.maxLengthInput,
-              value: maxLength
-            })
-          )
-        ),
-        h(Button, { label: loading ? "Analyzing" : "Analyze", onPress: runAnalysis, disabled: loading })
-      ),
-      loading ? h(View, { style: styles.loadingRow }, h(ActivityIndicator, { color: "#087f8c" }), h(Text, { style: styles.loadingText }, "Analyzing")) : null,
-      error ? h(View, { style: styles.errorPanel }, h(Text, { style: styles.errorText }, error)) : null,
-      h(ResultPanel, { result })
-    )
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>FAKE NEWS PLATFORM</Text>
+          <Text style={styles.title}>Mobile Analysis</Text>
+          <Text style={styles.status}>{`Backend: ${backendStatus}`}</Text>
+        </View>
+        <View style={styles.panel}>
+          <Text style={styles.label}>Backend URL</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            inputMode="url"
+            onChangeText={setBackendOrigin}
+            style={styles.input}
+            value={backendOrigin}
+          />
+          <Button label="Check Backend" onPress={() => void checkBackend()} secondary />
+        </View>
+        <View style={styles.segment}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setMode("text")}
+            style={[styles.segmentItem, mode === "text" ? styles.segmentActive : null]}
+          >
+            <Text style={[styles.segmentText, mode === "text" ? styles.segmentTextActive : null]}>Text</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setMode("url")}
+            style={[styles.segmentItem, mode === "url" ? styles.segmentActive : null]}
+          >
+            <Text style={[styles.segmentText, mode === "url" ? styles.segmentTextActive : null]}>URL</Text>
+          </Pressable>
+        </View>
+        <View style={styles.panel}>
+          <Text style={styles.label}>{mode === "text" ? "Claim Text" : "Article URL"}</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            inputMode={mode === "text" ? "text" : "url"}
+            multiline={mode === "text"}
+            onChangeText={mode === "text" ? setText : setUrl}
+            placeholder={mode === "text" ? "Paste a claim" : "https://example.com/article"}
+            placeholderTextColor="#7a8178"
+            style={[styles.input, mode === "text" ? styles.textArea : null]}
+            value={mode === "text" ? text : url}
+          />
+          <View style={styles.optionsRow}>
+            <View style={styles.switchRow}>
+              <Text style={styles.optionText}>Deep check</Text>
+              <Switch value={deepCheck} onValueChange={setDeepCheck} />
+            </View>
+            <View style={styles.maxLengthGroup}>
+              <Text style={styles.optionText}>Max</Text>
+              <TextInput
+                inputMode="numeric"
+                keyboardType="number-pad"
+                onChangeText={setMaxLength}
+                style={styles.maxLengthInput}
+                value={maxLength}
+              />
+            </View>
+          </View>
+          <Button label={loading ? "Analyzing" : "Analyze"} onPress={() => void runAnalysis()} disabled={loading} />
+        </View>
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color="#087f8c" />
+            <Text style={styles.loadingText}>Analyzing</Text>
+          </View>
+        ) : null}
+        {error ? (
+          <View style={styles.errorPanel}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+        <ResultPanel result={result} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f6f8f5"
-  },
-  container: {
-    padding: 20,
-    gap: 14
-  },
-  header: {
-    paddingTop: 12,
-    paddingBottom: 8
-  },
-  eyebrow: {
-    color: "#087f8c",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0
-  },
-  title: {
-    color: "#17201b",
-    fontSize: 30,
-    fontWeight: "800",
-    letterSpacing: 0,
-    marginTop: 4
-  },
-  status: {
-    color: "#46524a",
-    fontSize: 14,
-    marginTop: 8
-  },
-  panel: {
-    backgroundColor: "#ffffff",
-    borderColor: "#d7ddd2",
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 14,
-    gap: 10
-  },
-  label: {
-    color: "#253129",
-    fontSize: 13,
-    fontWeight: "700"
-  },
+  safeArea: { flex: 1, backgroundColor: "#f6f8f5" },
+  container: { padding: 20, gap: 14 },
+  header: { paddingTop: 12, paddingBottom: 8 },
+  eyebrow: { color: "#087f8c", fontSize: 12, fontWeight: "700" },
+  title: { color: "#17201b", fontSize: 30, fontWeight: "800", marginTop: 4 },
+  status: { color: "#46524a", fontSize: 14, marginTop: 8 },
+  panel: { backgroundColor: "#ffffff", borderColor: "#d7ddd2", borderRadius: 8, borderWidth: 1, padding: 14, gap: 10 },
+  label: { color: "#253129", fontSize: 13, fontWeight: "700" },
   input: {
     backgroundColor: "#fbfcfa",
     borderColor: "#cbd4c7",
@@ -404,92 +288,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10
   },
-  textArea: {
-    minHeight: 120,
-    textAlignVertical: "top"
-  },
-  button: {
-    alignItems: "center",
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 46,
-    paddingHorizontal: 16
-  },
-  primaryButton: {
-    backgroundColor: "#087f8c"
-  },
-  secondaryButton: {
-    backgroundColor: "#eef6f4",
-    borderColor: "#a8d8d1",
-    borderWidth: 1
-  },
-  disabledButton: {
-    opacity: 0.55
-  },
-  pressedButton: {
-    transform: [{ scale: 0.99 }]
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "800"
-  },
-  secondaryButtonText: {
-    color: "#075f69"
-  },
-  segment: {
-    backgroundColor: "#e8ece5",
-    borderRadius: 8,
-    flexDirection: "row",
-    padding: 4
-  },
-  segmentItem: {
-    alignItems: "center",
-    borderRadius: 6,
-    flex: 1,
-    minHeight: 40,
-    justifyContent: "center"
-  },
-  segmentActive: {
-    backgroundColor: "#ffffff",
-    borderColor: "#cbd4c7",
-    borderWidth: 1
-  },
-  segmentText: {
-    color: "#46524a",
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  segmentTextActive: {
-    color: "#17201b"
-  },
-  optionsRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    justifyContent: "space-between"
-  },
-  actionsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10
-  },
-  switchRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10
-  },
-  optionText: {
-    color: "#253129",
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  maxLengthGroup: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8
-  },
+  textArea: { minHeight: 120, textAlignVertical: "top" },
+  button: { alignItems: "center", borderRadius: 8, justifyContent: "center", minHeight: 46, paddingHorizontal: 16 },
+  primaryButton: { backgroundColor: "#087f8c" },
+  secondaryButton: { backgroundColor: "#eef6f4", borderColor: "#a8d8d1", borderWidth: 1 },
+  disabledButton: { opacity: 0.55 },
+  pressedButton: { transform: [{ scale: 0.99 }] },
+  buttonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
+  secondaryButtonText: { color: "#075f69" },
+  segment: { backgroundColor: "#e8ece5", borderRadius: 8, flexDirection: "row", padding: 4 },
+  segmentItem: { alignItems: "center", borderRadius: 6, flex: 1, minHeight: 40, justifyContent: "center" },
+  segmentActive: { backgroundColor: "#ffffff", borderColor: "#cbd4c7", borderWidth: 1 },
+  segmentText: { color: "#46524a", fontSize: 14, fontWeight: "700" },
+  segmentTextActive: { color: "#17201b" },
+  optionsRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 12, justifyContent: "space-between" },
+  switchRow: { alignItems: "center", flexDirection: "row", gap: 10 },
+  optionText: { color: "#253129", fontSize: 14, fontWeight: "700" },
+  maxLengthGroup: { alignItems: "center", flexDirection: "row", gap: 8 },
   maxLengthInput: {
     backgroundColor: "#fbfcfa",
     borderColor: "#cbd4c7",
@@ -502,103 +317,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
     width: 76
   },
-  loadingRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "center",
-    paddingVertical: 8
-  },
-  loadingText: {
-    color: "#46524a",
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  errorPanel: {
-    backgroundColor: "#fff4f2",
-    borderColor: "#f5b6ad",
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 12
-  },
-  errorText: {
-    color: "#8b1d12",
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  resultHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12
-  },
-  panelTitle: {
-    color: "#17201b",
-    fontSize: 18,
-    fontWeight: "800"
-  },
-  verdict: {
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: "800",
-    overflow: "hidden",
-    paddingHorizontal: 10,
-    paddingVertical: 6
-  },
-  realTone: {
-    backgroundColor: "#e6f4ed",
-    color: "#16794c"
-  },
-  fakeTone: {
-    backgroundColor: "#fff0f0",
-    color: "#b42318"
-  },
-  unverifiedTone: {
-    backgroundColor: "#fff7e8",
-    color: "#8a5700"
-  },
-  neutralTone: {
-    backgroundColor: "#eef1ee",
-    color: "#46524a"
-  },
-  metricRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10
-  },
-  metricLabel: {
-    color: "#46524a",
-    fontSize: 14
-  },
-  metricValue: {
-    color: "#17201b",
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  reason: {
-    color: "#253129",
-    fontSize: 15,
-    lineHeight: 21
-  },
-  meta: {
-    color: "#69736c",
-    fontSize: 12
-  },
-  evidenceList: {
-    gap: 6
-  },
-  evidenceItem: {
-    color: "#253129",
-    fontSize: 13,
-    lineHeight: 18
-  },
-  warningList: {
-    gap: 6
-  },
-  warningItem: {
-    color: "#8a5700",
-    fontSize: 13,
-    fontWeight: "700"
-  }
+  loadingRow: { alignItems: "center", flexDirection: "row", gap: 10, justifyContent: "center", paddingVertical: 8 },
+  loadingText: { color: "#46524a", fontSize: 14, fontWeight: "700" },
+  errorPanel: { backgroundColor: "#fff4f2", borderColor: "#f5b6ad", borderRadius: 8, borderWidth: 1, padding: 12 },
+  errorText: { color: "#8b1d12", fontSize: 14, fontWeight: "700" },
+  resultHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  panelTitle: { color: "#17201b", fontSize: 18, fontWeight: "800" },
+  verdict: { borderRadius: 6, fontSize: 13, fontWeight: "800", overflow: "hidden", paddingHorizontal: 10, paddingVertical: 6 },
+  realTone: { backgroundColor: "#e6f4ed", color: "#16794c" },
+  fakeTone: { backgroundColor: "#fff0f0", color: "#b42318" },
+  unverifiedTone: { backgroundColor: "#fff7e8", color: "#8a5700" },
+  neutralTone: { backgroundColor: "#eef1ee", color: "#46524a" },
+  metricRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", gap: 10 },
+  metricLabel: { color: "#46524a", fontSize: 14 },
+  metricValue: { color: "#17201b", fontSize: 14, fontWeight: "800" },
+  reason: { color: "#253129", fontSize: 15, lineHeight: 21 },
+  meta: { color: "#69736c", fontSize: 12 },
+  evidenceItem: { color: "#253129", fontSize: 13, lineHeight: 18 },
+  warningItem: { color: "#8a5700", fontSize: 13, fontWeight: "700" }
 });

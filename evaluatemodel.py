@@ -44,7 +44,7 @@ from tqdm.auto import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 # This is the cleaner used by the existing checkpoint during training.
-from src.data_loader import clean_news_text as training_clean_news_text
+from packages.ml import clean_news_text as training_clean_news_text
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

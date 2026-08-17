@@ -363,44 +363,6 @@ class ApiSlice2Tests(unittest.TestCase):
         self.assertEqual(response.headers["X-Trace-ID"], "trace-test")
         self.assertEqual(response.json()["request_id"], "req-test")
 
-    def test_auth_sign_in_restore_and_sign_out_revoke_session(self) -> None:
-        sign_in = self.client.post(
-            "/v1/auth/sign-in",
-            json={
-                "username": "local-reviewer",
-                "tenant_id": "local",
-                "client_type": "web",
-            },
-        )
-        self.assertEqual(sign_in.status_code, 200)
-        session = sign_in.json()
-        self.assertTrue(session["authenticated"])
-        self.assertEqual(session["user"]["user_id"], "local-reviewer")
-        token = session["access_token"]
-        self.assertIsInstance(token, str)
-
-        restored = self.client.get(
-            "/v1/auth/session",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        self.assertEqual(restored.status_code, 200)
-        self.assertTrue(restored.json()["authenticated"])
-        self.assertIsNone(restored.json()["access_token"])
-
-        signed_out = self.client.post(
-            "/v1/auth/sign-out",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        self.assertEqual(signed_out.status_code, 200)
-        self.assertTrue(signed_out.json()["signed_out"])
-
-        rejected = self.client.get(
-            "/v1/auth/session",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        self.assertEqual(rejected.status_code, 401)
-        self.assertEqual(rejected.json()["error_code"], "AUTHENTICATION_REQUIRED")
-
     def test_wildcard_cors_is_not_enabled(self) -> None:
         self.assertNotIn("*", self.app.state.allowed_origins)
         with self.assertRaises(ValueError):
@@ -415,7 +377,7 @@ class ApiSlice2Tests(unittest.TestCase):
             headers={
                 "Origin": "http://127.0.0.1:5173",
                 "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "Authorization,Content-Type,X-CSRF-Token",
+                "Access-Control-Request-Headers": "Content-Type,X-Request-ID",
             },
         )
 
@@ -426,11 +388,7 @@ class ApiSlice2Tests(unittest.TestCase):
         )
         self.assertIn("POST", response.headers["access-control-allow-methods"])
         self.assertIn(
-            "Authorization",
-            response.headers["access-control-allow-headers"],
-        )
-        self.assertIn(
-            "X-CSRF-Token",
+            "Content-Type",
             response.headers["access-control-allow-headers"],
         )
 

@@ -1,10 +1,10 @@
 export function createHistoryStore(limit = 50) {
-  const items = [];
+  const items: any[] = [];
   return {
     list() {
       return [...items];
     },
-    add(item) {
+    add(item: any) {
       items.unshift(item);
       if (items.length > limit) {
         items.pop();

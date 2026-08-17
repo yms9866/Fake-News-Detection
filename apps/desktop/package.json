@@ -8,17 +8,18 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "typecheck": "node scripts/typecheck.mjs",
+    "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint.mjs",
     "test": "node scripts/build.mjs && node scripts/test.mjs tests/unit tests/integration",
     "test:e2e": "node scripts/build.mjs && node scripts/test.mjs tests/e2e"
   },
-  "optionalPeerDependencies": {
-    "electron": ">=30.0.0",
-    "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+  "dependencies": {
+    "@fnd/analysis-view-model": "workspace:*",
+    "@fnd/client-sdk": "workspace:*",
+    "electron": "^43.1.1"
   },
   "devDependencies": {
-    "electron": "^43.1.1"
+    "esbuild": "^0.24.2",
+    "typescript": "^5.6.0"
   }
 }

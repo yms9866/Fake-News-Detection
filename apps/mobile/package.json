@@ -30,6 +30,8 @@
   },
   "dependencies": {
     "@babel/runtime": "7.29.7",
+    "@fnd/analysis-view-model": "workspace:*",
+    "@fnd/client-sdk": "workspace:*",
     "@react-native/assets-registry": "0.74.87",
     "expo": "^57.0.8",
     "expo-asset": "~57.0.7",
@@ -41,6 +43,7 @@
   "devDependencies": {
     "@types/react": "~19.2.17",
     "babel-preset-expo": "57.0.4",
+    "esbuild": "^0.24.2",
     "expo-doctor": "1.20.1",
     "typescript": "~6.0.3"
   }

@@ -9,12 +9,17 @@
     "allowJs": false,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@fnd/client-sdk": ["../../packages/client-sdk/src/index.ts"],
+      "@fnd/analysis-view-model": ["../../packages/analysis-view-model/src/index.ts"]
+    }
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.tsx",
-    "tests/**/*.mjs"
+    "src/**/*.tsx"
   ],
   "extends": "expo/tsconfig.base"
 }
