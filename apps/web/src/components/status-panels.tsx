@@ -19,7 +19,7 @@ export function LoadingState({ message = "Working" }: { message?: string }) {
             <Sparkles size={16} style={{ color: "var(--accent-secondary)" }} />
             {message}
           </strong>
-          <p className="muted">The request is in progress. You can continue using the app when it completes.</p>
+          <p className="muted">Veritas is checking the claim against independent evidence.</p>
         </div>
       </div>
     </motion.div>
@@ -108,8 +108,7 @@ export function ConnectionStatus({ connection, retryAction }: { connection: any;
     <div className={`connection-status ${status}`} aria-live="polite">
       <div className="status-dot" />
       {isReady ? <Wifi size={14} style={{ color: "var(--status-real-text)" }} /> : <WifiOff size={14} style={{ color: "var(--text-muted)" }} />}
-      <strong>Backend: {connectionLabel(status)}</strong>
-      <span className="muted">{connection?.origin || "http://127.0.0.1:8000"}</span>
+      <strong>{connectionLabel(status)}</strong>
       {status !== "ready" && (
         <button onClick={retryAction} className="button compact" style={{ marginLeft: 4 }}>
           <RefreshCw size={12} />
@@ -167,14 +166,8 @@ function validationMessages(error: any) {
 }
 
 function connectionLabel(status: string) {
-  if (status === "ready") {
-    return "connected";
-  }
-  if (status === "checking") {
-    return "checking";
-  }
-  if (status === "unavailable") {
-    return "unavailable";
-  }
-  return "not checked";
+  if (status === "ready") return "Ready";
+  if (status === "checking") return "Checking";
+  if (status === "unavailable") return "Offline";
+  return "Not checked";
 }

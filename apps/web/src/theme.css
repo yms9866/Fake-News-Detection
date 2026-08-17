@@ -1,0 +1,138 @@
+/* Radix Colors — https://www.radix-ui.com/colors */
+@import "@radix-ui/colors/slate.css";
+@import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/indigo.css";
+@import "@radix-ui/colors/indigo-dark.css";
+@import "@radix-ui/colors/green.css";
+@import "@radix-ui/colors/green-dark.css";
+@import "@radix-ui/colors/red.css";
+@import "@radix-ui/colors/red-dark.css";
+@import "@radix-ui/colors/amber.css";
+@import "@radix-ui/colors/amber-dark.css";
+@import "@radix-ui/colors/sky.css";
+@import "@radix-ui/colors/sky-dark.css";
+
+/* Shared semantic tokens (Radix scales swap per .light / .dark) */
+.light,
+.light-theme,
+.dark,
+.dark-theme {
+  --bg-app: var(--slate-1);
+  --bg-sidebar: var(--slate-2);
+  --bg-surface: var(--slate-2);
+  --bg-surface-hover: var(--slate-3);
+  --bg-surface-elevated: var(--slate-3);
+  --bg-surface-active: var(--slate-4);
+
+  --text-primary: var(--slate-12);
+  --text-secondary: var(--slate-11);
+  --text-muted: var(--slate-10);
+  --text-dim: var(--slate-9);
+
+  --accent-primary: var(--indigo-9);
+  --accent-primary-hover: var(--indigo-10);
+  --accent-secondary: var(--indigo-11);
+
+  --status-real-text: var(--green-11);
+  --status-fake-text: var(--red-11);
+  --status-uncertain-text: var(--amber-11);
+  --status-info-text: var(--sky-11);
+}
+
+.light,
+.light-theme {
+  --bg-glass: rgba(255, 255, 255, 0.82);
+  --bg-glass-elevated: rgba(255, 255, 255, 0.92);
+
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-medium: rgba(0, 0, 0, 0.14);
+  --border-strong: rgba(0, 0, 0, 0.22);
+  --border-focus: rgba(62, 99, 221, 0.45);
+
+  --accent-glow: rgba(62, 99, 221, 0.18);
+  --accent-glow-strong: rgba(62, 99, 221, 0.32);
+
+  --status-real-bg: var(--green-3);
+  --status-real-border: var(--green-7);
+  --status-real-glow: rgba(48, 164, 108, 0.15);
+
+  --status-fake-bg: var(--red-3);
+  --status-fake-border: var(--red-7);
+  --status-fake-glow: rgba(229, 72, 77, 0.15);
+
+  --status-uncertain-bg: var(--amber-3);
+  --status-uncertain-border: var(--amber-7);
+  --status-uncertain-glow: rgba(255, 186, 26, 0.15);
+
+  --status-info-bg: var(--sky-3);
+  --status-info-border: var(--sky-7);
+  --status-info-glow: rgba(56, 189, 248, 0.15);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 32px var(--accent-glow);
+
+  --header-bg: rgba(252, 252, 253, 0.85);
+  --verdict-fade: var(--slate-2);
+  --nav-active-bg: var(--indigo-3);
+  --nav-active-border: var(--indigo-7);
+  --nav-active-text: var(--indigo-11);
+  --brand-badge-bg: var(--indigo-3);
+  --brand-badge-text: var(--indigo-11);
+  --brand-badge-border: var(--indigo-7);
+  --source-icon-bg: rgba(0, 0, 0, 0.06);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+  --app-gradient-accent: rgba(62, 99, 221, 0.06);
+  --app-gradient-success: rgba(48, 164, 108, 0.04);
+}
+
+.dark,
+.dark-theme {
+  --bg-glass: rgba(17, 17, 19, 0.78);
+  --bg-glass-elevated: rgba(33, 34, 37, 0.88);
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-medium: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.20);
+  --border-focus: rgba(99, 102, 241, 0.5);
+
+  --accent-glow: rgba(99, 102, 241, 0.22);
+  --accent-glow-strong: rgba(99, 102, 241, 0.40);
+
+  --status-real-bg: rgba(16, 185, 129, 0.08);
+  --status-real-border: rgba(16, 185, 129, 0.22);
+  --status-real-glow: rgba(16, 185, 129, 0.15);
+
+  --status-fake-bg: rgba(244, 63, 94, 0.08);
+  --status-fake-border: rgba(244, 63, 94, 0.22);
+  --status-fake-glow: rgba(244, 63, 94, 0.15);
+
+  --status-uncertain-bg: rgba(245, 158, 11, 0.08);
+  --status-uncertain-border: rgba(245, 158, 11, 0.22);
+  --status-uncertain-glow: rgba(245, 158, 11, 0.15);
+
+  --status-info-bg: rgba(56, 189, 248, 0.08);
+  --status-info-border: rgba(56, 189, 248, 0.22);
+  --status-info-glow: rgba(56, 189, 248, 0.15);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.60);
+  --shadow-glow: 0 0 32px var(--accent-glow);
+
+  --header-bg: rgba(7, 7, 9, 0.7);
+  --verdict-fade: var(--slate-2);
+  --nav-active-bg: rgba(99, 102, 241, 0.12);
+  --nav-active-border: rgba(99, 102, 241, 0.25);
+  --nav-active-text: #a5b4fc;
+  --brand-badge-bg: rgba(99, 102, 241, 0.15);
+  --brand-badge-text: #a5b4fc;
+  --brand-badge-border: rgba(99, 102, 241, 0.3);
+  --source-icon-bg: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+  --app-gradient-accent: rgba(99, 102, 241, 0.07);
+  --app-gradient-success: rgba(16, 185, 129, 0.03);
+}

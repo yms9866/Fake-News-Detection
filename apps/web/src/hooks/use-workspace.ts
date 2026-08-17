@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { createWebApiClient, WebApiClient } from "../api/client";
 import { compactHistoryItem } from "../components/safe-rendering";
 import { createHistoryStore } from "../stores/history-store";
@@ -73,7 +74,9 @@ export function useWorkspace() {
   const client = clientRef.current;
   const history = useMemo(() => createHistoryStore(), []);
 
-  const [route, setRoute] = useState("analyze");
+  const location = useLocation();
+  const routerNavigate = useNavigate();
+  const route = location.pathname.replace(/^\//, "").split("/")[0] || "analyze";
   const [result, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
   const [job, setJob] = useState<Record<string, unknown> | null>(null);
   const [live, setLive] = useState<Record<string, unknown> | null>(null);
@@ -121,13 +124,13 @@ export function useWorkspace() {
       const next = await client.getAnalysis(String(finished.analysis_id));
       setAnalysisResult(next);
       setHistoryList(history.add(compactHistoryItem(next)));
-      setRoute("result");
+      routerNavigate("/result");
     }
   }
 
   const actions = {
     navigate(newRoute: string) {
-      setRoute(newRoute);
+      routerNavigate(`/${newRoute}`);
     },
     saveSettings(next: WebSettings) {
       setSettings(next);
@@ -145,7 +148,7 @@ export function useWorkspace() {
         const next = await client.analyzeText(payload);
         setAnalysisResult(next);
         setHistoryList(history.add(compactHistoryItem(next)));
-        setRoute("result");
+        routerNavigate("/result");
       });
     },
     async analyzeUrl(payload: { url: string; deep_check: boolean; max_length: number }) {
@@ -153,7 +156,7 @@ export function useWorkspace() {
         const next = await client.analyzeUrl(payload);
         setAnalysisResult(next);
         setHistoryList(history.add(compactHistoryItem(next)));
-        setRoute("result");
+        routerNavigate("/result");
       });
     },
     async uploadMedia(file: File) {
@@ -209,7 +212,7 @@ export function useWorkspace() {
           const analyzed = await client.getAnalysis(String(analysisId));
           setAnalysisResult(analyzed);
           setHistoryList(history.add(compactHistoryItem(analyzed)));
-          setRoute("result");
+          routerNavigate("/result");
         }
       });
     },
@@ -218,7 +221,7 @@ export function useWorkspace() {
       await run("history", async () => {
         const next = await client.getAnalysis(item.analysisId as string);
         setAnalysisResult(next);
-        setRoute("result");
+        routerNavigate("/result");
       });
     },
     async diagnostics() {

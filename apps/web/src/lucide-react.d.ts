@@ -20,7 +20,9 @@ declare module "lucide-react" {
   export const Inbox: LucideIcon;
   export const Loader2: LucideIcon;
   export const Mic: LucideIcon;
+  export const Menu: LucideIcon;
   export const Monitor: LucideIcon;
+  export const Moon: LucideIcon;
   export const Paperclip: LucideIcon;
   export const PanelLeftClose: LucideIcon;
   export const PanelLeftOpen: LucideIcon;
@@ -32,7 +34,9 @@ declare module "lucide-react" {
   export const ShieldAlert: LucideIcon;
   export const ShieldCheck: LucideIcon;
   export const Sparkles: LucideIcon;
+  export const Sun: LucideIcon;
   export const UploadCloud: LucideIcon;
   export const Wifi: LucideIcon;
   export const WifiOff: LucideIcon;
+  export const X: LucideIcon;
 }

@@ -30,7 +30,7 @@ def list_models(
     return ModelsResponse(
         models=[
             ModelInfo(
-                name="modernbert_fake_news",
+                name="modernbert_fake_news_512",
                 path=str(registry.model_path),
                 exists=registry.model_exists(),
                 loaded=registry.is_loaded(),

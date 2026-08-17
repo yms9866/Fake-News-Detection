@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src http://127.0.0.1:* http://localhost:* blob:; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'">
     <title>Fake News Web</title>
+    <script>
+      (function () {
+        var stored = localStorage.getItem("veritas-theme");
+        var theme = stored === "light" || stored === "dark"
+          ? stored
+          : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.classList.add(theme, theme + "-theme");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <link rel="stylesheet" href="/src/theme.css">
     <link rel="stylesheet" href="/src/styles.css">
   </head>
   <body>

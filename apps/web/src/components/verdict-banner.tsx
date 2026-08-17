@@ -12,6 +12,7 @@ export function VerdictBanner({ result }: { result: any }) {
   const verdictDisplay = verdict;
   let VerdictIcon = HelpCircle;
   let meterPercentage = 50;
+  let showPercentageText = false;
 
   const upperVerdict = verdict.toUpperCase();
   if (upperVerdict.includes("REAL") || upperVerdict.includes("TRUE") || upperVerdict.includes("AUTHENTIC")) {
@@ -32,8 +33,9 @@ export function VerdictBanner({ result }: { result: any }) {
     meterPercentage = 68;
   } else if (upperConf.includes("LOW")) {
     meterPercentage = 35;
-  } else if (!isNaN(Number(confidence))) {
+  } else if (!isNaN(Number(confidence)) && confidence.trim() !== "") {
     meterPercentage = Math.round(Number(confidence) * 100);
+    showPercentageText = true;
   }
 
   return (
@@ -59,9 +61,9 @@ export function VerdictBanner({ result }: { result: any }) {
           <div className="confidence-badge">
             <Activity size={14} style={{ color: "var(--accent-secondary)" }} />
             <span className="confidence-label">{confidence} Confidence</span>
-            <span className="muted">({meterPercentage}%)</span>
+            {showPercentageText && <span className="muted">({meterPercentage}%)</span>}
           </div>
-          <div className="confidence-meter-bar" aria-label={`Confidence level: ${meterPercentage}%`}>
+          <div className="confidence-meter-bar" aria-label={showPercentageText ? `Confidence level: ${meterPercentage}%` : `Confidence: ${confidence}`}>
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${meterPercentage}%` }}

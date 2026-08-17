@@ -18,13 +18,46 @@ export function textOnly(value: unknown, fallback = "") {
   return String(value === undefined || value === null ? fallback : value);
 }
 
+function deriveTitle(result: Record<string, unknown>): string {
+  const text = textOnly(result.extracted_text || result.cleaned_text || result.text);
+  if (text) {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (trimmed.length > 60) return trimmed.slice(0, 57) + "…";
+    if (trimmed.length > 0) return trimmed;
+  }
+  const url = textOnly(result.source_url);
+  if (url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch { /* ignore */ }
+  }
+  const verdict = textOnly(result.final_verdict, "UNVERIFIED");
+  return `Analysis — ${verdict}`;
+}
+
+function toSlug(title: string, dateStr: string | null): string {
+  const base = title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  const suffix = dateStr
+    ? new Date(dateStr).toISOString().slice(0, 10).replace(/-/g, "")
+    : Date.now().toString(36);
+  return `${base}-${suffix}`;
+}
+
 export function compactHistoryItem(result: Record<string, unknown>) {
+  const createdAt = result.created_at ? String(result.created_at) : null;
+  const title = deriveTitle(result);
   return {
     analysisId: textOnly(result.analysis_id),
     inputType: textOnly(result.input_type),
     finalVerdict: textOnly(result.final_verdict, "UNVERIFIED"),
     confidence: textOnly(result.confidence, "LOW"),
-    createdAt: result.created_at ? String(result.created_at) : null
+    createdAt,
+    title,
+    slug: toSlug(title, createdAt)
   };
 }
 
