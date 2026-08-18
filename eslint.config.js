@@ -6,6 +6,7 @@ export default tseslint.config(
     ignores: [
       "**/dist/**",
       "**/node_modules/**",
+      "apps/web/public/tesseract/**",
       "**/.expo-export/**",
       "**/.bugreport-tmp/**",
       "apps/mobile/android/**",

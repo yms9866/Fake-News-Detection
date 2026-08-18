@@ -36,6 +36,12 @@ body {
   overflow-x: hidden;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 /* Accessibility Focus Ring */
 *:focus-visible {
   outline: 2px solid var(--accent-primary);
@@ -71,8 +77,9 @@ body {
 .app-shell {
   display: flex;
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
   min-height: 100dvh;
+  overflow: hidden;
   background:
     radial-gradient(ellipse 80% 50% at 50% -20%, var(--app-gradient-accent), transparent 70%),
     radial-gradient(ellipse 40% 40% at 100% 100%, var(--app-gradient-success), transparent 60%),
@@ -82,6 +89,8 @@ body {
 /* Sidebar Styles */
 .sidebar {
   width: var(--sidebar-width);
+  height: 100%;
+  max-height: 100dvh;
   background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   display: flex;
@@ -89,6 +98,7 @@ body {
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 40;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .sidebar.collapsed {
@@ -261,7 +271,10 @@ nav {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Top Header */
@@ -1089,6 +1102,17 @@ ul.warnings li::before {
 @media (max-width: 768px) {
   :root {
     --header-height: 52px;
+  }
+
+  .app-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .content-shell {
+    overflow-y: visible;
+    min-height: auto;
   }
 
   .menu-toggle {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query
@@ -10,14 +11,17 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse
 
 from apps.api.app.dependencies import (
+    get_analysis_repository,
     get_live_event_repository,
     get_live_service,
 )
 from apps.api.app.middleware import get_request_id, get_trace_id
 from apps.api.app.serializers import (
+    analysis_response_from_result,
     live_event_response_from_domain,
     live_session_response_from_domain,
 )
+from apps.api.app.state import InMemoryAnalysisRepository
 from packages.backend.fnd.adapters.live.in_memory import (
     InMemoryLiveSessionEventRepository,
 )
@@ -183,19 +187,32 @@ def verify_live_session(
     payload: VerifyLiveSessionRequest,
     request: Request,
     service: LiveOcrSessionService = Depends(get_live_service),
+    repository: InMemoryAnalysisRepository = Depends(get_analysis_repository),
 ) -> LiveSessionResponse:
-    return _response(
-        service.verify(
-            VerifyLiveSessionCommand(
-                session_id=session_id,
-                trigger=LiveVerificationTrigger(payload.trigger),
-                deep_check=payload.deep_check,
-                max_length=payload.max_length,
-                force=payload.force,
-            )
-        ),
-        request,
+    created_at = datetime.now(timezone.utc)
+    verified = service.verify(
+        VerifyLiveSessionCommand(
+            session_id=session_id,
+            trigger=LiveVerificationTrigger(payload.trigger),
+            deep_check=payload.deep_check,
+            max_length=payload.max_length,
+            force=payload.force,
+        )
     )
+    latest = verified.session.latest_verification
+    if verified.analysis is not None and latest is not None:
+        completed_at = datetime.now(timezone.utc)
+        repository.save(
+            analysis_response_from_result(
+                verified.analysis,
+                analysis_id=latest.analysis_id,
+                request_id=get_request_id(request),
+                trace_id=get_trace_id(request),
+                created_at=created_at,
+                completed_at=completed_at,
+            )
+        )
+    return _response(verified.session, request)
 
 
 @router.get(

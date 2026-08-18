@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
 import logging
@@ -14,6 +15,7 @@ from packages.backend.fnd.application.services.verdict_policy import VerdictPoli
 from packages.backend.fnd.domain.entities import (
     AnalysisResult,
     AnalyzeContentCommand,
+    AtomicClaim,
     EvidenceAnalysis,
     ExtractedDocument,
     SearchContext,
@@ -74,52 +76,36 @@ class AnalyzeContentWorkflow:
         analysis_start = perf_counter()
         resolved_max_length = max_length or 1024
         timings_ms: dict[str, float] = {}
+        run_parallel = bool(deep_check and normalize_text(document.text))
 
-        style_start = perf_counter()
-        try:
-            style = self.style_model.analyze(
-                document.text,
-                max_length=resolved_max_length,
-            )
-        except Exception as exc:
-            style = StyleAnalysis.from_prediction(
-                signal=StyleRiskSignal.ERROR,
-                confidence=None,
-                text=document.text,
-                error=str(exc),
-            )
-        timings_ms["style_analysis"] = (perf_counter() - style_start) * 1000
-
-        search_context: SearchContext | None = None
-        evidence: EvidenceAnalysis | None = None
-
-        if deep_check and normalize_text(document.text):
+        if run_parallel:
             max_results = max_search_results or 6
-            search_start = perf_counter()
-            if self.evidence_review_pipeline is not None:
-                reviewed = self.evidence_review_pipeline.review(
-                    text=document.text,
-                    max_results=max_results,
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                style_future = pool.submit(
+                    self._analyze_style,
+                    document.text,
+                    resolved_max_length,
                 )
-                claims = reviewed.claims
-                search_context = reviewed.search_context
-            else:
-                search_context = self.search_provider.search(
-                    claim_text=document.text,
-                    max_results=max_results,
+                deep_future = pool.submit(
+                    self._run_deep_check,
+                    document.text,
+                    max_results,
                 )
-                claims = ()
-            timings_ms["search_and_source_review"] = (
-                perf_counter() - search_start
-            ) * 1000
-
-            evidence_start = perf_counter()
-            evidence = self.evidence_provider.verify(
-                claim_text=document.text,
-                search_context=search_context,
-            )
-            timings_ms["evidence_analysis"] = (perf_counter() - evidence_start) * 1000
+                style, style_ms = style_future.result()
+                search_context, evidence, claims, search_ms, evidence_ms = (
+                    deep_future.result()
+                )
+            timings_ms["style_analysis"] = style_ms
+            timings_ms["search_and_source_review"] = search_ms
+            timings_ms["evidence_analysis"] = evidence_ms
         else:
+            style, style_ms = self._analyze_style(
+                document.text,
+                resolved_max_length,
+            )
+            timings_ms["style_analysis"] = style_ms
+            search_context = None
+            evidence = None
             claims = ()
 
         final = self.verdict_policy.decide(style=style, evidence=evidence)
@@ -130,6 +116,7 @@ class AnalyzeContentWorkflow:
             style_analysis_duration_ms=round(timings_ms["style_analysis"], 3),
             input_type=document.input_type.value,
             word_count=str(style.word_count),
+            parallel_analysis="true" if run_parallel else "false",
         )
         return AnalysisResult(
             document=document,
@@ -140,6 +127,52 @@ class AnalyzeContentWorkflow:
             claims=claims,
             timings_ms=timings_ms,
         )
+
+    def _analyze_style(self, text: str, max_length: int) -> tuple[StyleAnalysis, float]:
+        started = perf_counter()
+        try:
+            style = self.style_model.analyze(text, max_length=max_length)
+        except Exception as exc:
+            style = StyleAnalysis.from_prediction(
+                signal=StyleRiskSignal.ERROR,
+                confidence=None,
+                text=text,
+                error=str(exc),
+            )
+        return style, (perf_counter() - started) * 1000
+
+    def _run_deep_check(
+        self, text: str, max_results: int
+    ) -> tuple[
+        SearchContext,
+        EvidenceAnalysis,
+        tuple[AtomicClaim, ...],
+        float,
+        float,
+    ]:
+        search_start = perf_counter()
+        if self.evidence_review_pipeline is not None:
+            reviewed = self.evidence_review_pipeline.review(
+                text=text,
+                max_results=max_results,
+            )
+            claims = reviewed.claims
+            search_context = reviewed.search_context
+        else:
+            search_context = self.search_provider.search(
+                claim_text=text,
+                max_results=max_results,
+            )
+            claims = ()
+        search_ms = (perf_counter() - search_start) * 1000
+
+        evidence_start = perf_counter()
+        evidence = self.evidence_provider.verify(
+            claim_text=text,
+            search_context=search_context,
+        )
+        evidence_ms = (perf_counter() - evidence_start) * 1000
+        return search_context, evidence, tuple(claims), search_ms, evidence_ms
 
     def _extract(self, command: AnalyzeContentCommand) -> ExtractedDocument:
         if command.text:

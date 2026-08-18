@@ -15,6 +15,7 @@ node_modules/
 apps/extension/dist/
 apps/desktop/dist/
 apps/web/dist/
+apps/web/public/tesseract/
 apps/mobile/dist/
 apps/mobile/.expo
 apps/mobile/.expo-export*

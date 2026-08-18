@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import shutil
 import subprocess
@@ -338,10 +339,7 @@ class LocalMediaPreprocessor:
             frame_dir = work_dir / "frames"
             audio_start = perf_counter()
             self._ffmpeg.extract_video_audio(artifact.path, audio_path, cancellation)
-            transcript = self._transcription.transcribe(audio_path)
-            transcript_text, transcript_segments = (
-                self._transcription_text_and_segments(transcript)
-            )
+            audio_extract_ms = (perf_counter() - audio_start) * 1000
 
             frame_start = perf_counter()
             frames = self._ffmpeg.sample_video_frames(
@@ -350,12 +348,14 @@ class LocalMediaPreprocessor:
                 max_frames=self._settings.max_sampled_video_frames,
                 cancellation=cancellation,
             )
-            ocr_segments: list[str] = []
-            for frame in frames:
-                cancellation.throw_if_cancelled()
-                frame_text = self._ocr.extract_text(frame)
-                if frame_text:
-                    ocr_segments.append(frame_text)
+            sample_ms = (perf_counter() - frame_start) * 1000
+
+            transcript, transcript_ms, ocr_segments, ocr_ms = (
+                self._transcribe_and_ocr_video(audio_path, frames, cancellation)
+            )
+            transcript_text, transcript_segments = (
+                self._transcription_text_and_segments(transcript)
+            )
 
             deduped_ocr = deduplicate_segments(ocr_segments)
             text = merge_media_text_channels(
@@ -384,16 +384,47 @@ class LocalMediaPreprocessor:
                     },
                 },
                 timings_ms={
-                    "audio_transcription": round((frame_start - audio_start) * 1000, 3),
-                    "frame_extraction_ocr": round(
-                        (perf_counter() - frame_start) * 1000,
-                        3,
-                    ),
+                    "audio_transcription": round(audio_extract_ms + transcript_ms, 3),
+                    "frame_extraction_ocr": round(sample_ms + ocr_ms, 3),
                 },
             )
             return self._document(text=text, metadata=metadata, extraction=extraction)
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
+
+    def _transcribe_and_ocr_video(
+        self,
+        audio_path: Path,
+        frames: list[Path],
+        cancellation: CancellationToken,
+    ) -> tuple[dict[str, object], float, list[str], float]:
+        cancellation.throw_if_cancelled()
+
+        def transcribe() -> tuple[dict[str, object], float]:
+            started = perf_counter()
+            cancellation.throw_if_cancelled()
+            result = self._transcription.transcribe(audio_path)
+            return result, (perf_counter() - started) * 1000
+
+        def ocr_frame(frame: Path) -> str:
+            cancellation.throw_if_cancelled()
+            return self._ocr.extract_text(frame)
+
+        def ocr_frames() -> tuple[list[str], float]:
+            started = perf_counter()
+            if not frames:
+                return [], 0.0
+            worker_count = min(8, len(frames))
+            with ThreadPoolExecutor(max_workers=worker_count) as pool:
+                texts = list(pool.map(ocr_frame, frames))
+            return [text for text in texts if text], (perf_counter() - started) * 1000
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            transcript_future = pool.submit(transcribe)
+            ocr_future = pool.submit(ocr_frames)
+            transcript, transcript_ms = transcript_future.result()
+            ocr_segments, ocr_ms = ocr_future.result()
+        return transcript, transcript_ms, ocr_segments, ocr_ms
 
     def _transcription_text_and_segments(
         self,

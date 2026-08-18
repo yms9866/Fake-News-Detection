@@ -76,17 +76,37 @@ export async function snapshotStreamToFile(stream: MediaStream, name = "capture.
   return new File([blob], name, { type: "image/jpeg" });
 }
 
+/**
+ * 64-bit average hash rendered as 16 hex characters. The backend compares these
+ * with a Hamming distance against `perceptual_change_threshold` (0-64), so the
+ * hash must stay hex and fixed width.
+ */
 export function frameHash(canvas: HTMLCanvasElement) {
   const sample = document.createElement("canvas");
   sample.width = 8;
   sample.height = 8;
   const context = sample.getContext("2d");
   if (!context) {
-    return String(Date.now());
+    return (Date.now() % 0xffffffffffff).toString(16).padStart(16, "0");
   }
   context.drawImage(canvas, 0, 0, 8, 8);
   const data = context.getImageData(0, 0, 8, 8).data;
-  return Array.from(data).join(".");
+
+  const luminance: number[] = [];
+  for (let index = 0; index < data.length; index += 4) {
+    luminance.push(0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2]);
+  }
+  const mean = luminance.reduce((total, value) => total + value, 0) / luminance.length;
+
+  let hash = "";
+  for (let nibble = 0; nibble < 16; nibble += 1) {
+    let value = 0;
+    for (let bit = 0; bit < 4; bit += 1) {
+      value = (value << 1) | (luminance[nibble * 4 + bit] > mean ? 1 : 0);
+    }
+    hash += value.toString(16);
+  }
+  return hash;
 }
 
 export async function recordMicrophoneToFile(stream: MediaStream, durationMs = 8000) {

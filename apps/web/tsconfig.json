@@ -9,7 +9,6 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "@fnd/client-sdk": ["../../packages/client-sdk/src/index.ts"],
       "@fnd/analysis-view-model": ["../../packages/analysis-view-model/src/index.ts"]

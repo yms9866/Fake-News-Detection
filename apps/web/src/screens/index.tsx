@@ -22,6 +22,7 @@ import {
 import { ResultView } from "../components/result-view";
 import { EmptyState } from "../components/status-panels";
 import { frameHash, stopStream } from "../capture/browser-capture";
+import { getOcrWorker, recognizeCanvas, releaseOcrWorker } from "../capture/ocr";
 
 type Actions = {
   analyzeText: (payload: { text: string; deep_check: boolean; max_length: number }) => Promise<void>;
@@ -194,29 +195,67 @@ export function CaptureScreen({ actions }: { actions: Actions }) {
 
 export function LiveScreen({ actions, live }: { actions: Actions; live: Record<string, unknown> | null }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const lastHash = useRef("");
 
   useEffect(() => {
     const stream = live?.stream as MediaStream | undefined;
+    if (stream) {
+      streamRef.current = stream;
+    }
+    const activeStream = stream || streamRef.current;
     const video = videoRef.current;
-    if (video && stream) {
-      video.srcObject = stream;
+    if (video && activeStream) {
+      video.srcObject = activeStream;
       void video.play();
     }
+  }, [live?.stream, live?.session_id]);
+
+  useEffect(() => {
     return () => {
-      if (!live) stopStream(stream || null);
+      stopStream(streamRef.current);
+      streamRef.current = null;
     };
-  }, [live]);
+  }, []);
 
   const submitFrame = actions.submitLiveFrame;
+  const submitFrameRef = useRef(submitFrame);
+  submitFrameRef.current = submitFrame;
+
+  const sessionId = live?.session_id ? String(live.session_id) : "";
+  const hasStableText = Boolean(String(live?.stable_text || "").trim());
+  const latestVerification = live?.latest_verification as {
+    final_verdict?: string;
+    confidence?: string;
+    reason?: string;
+  } | null | undefined;
+
+  const [ocrState, setOcrState] = useState<"idle" | "starting" | "sampling" | "failed">("idle");
+  const [ocrError, setOcrError] = useState<string>("");
+  const [frameCount, setFrameCount] = useState(0);
+
   useEffect(() => {
-    if (!live?.session_id || !live.stream) {
+    if (!sessionId) {
       return;
     }
     let cancelled = false;
+    let busy = false;
+    setOcrState("starting");
+    setOcrError("");
+
+    void getOcrWorker().then(
+      () => !cancelled && setOcrState("sampling"),
+      (cause: Error) => {
+        if (!cancelled) {
+          setOcrState("failed");
+          setOcrError(cause.message);
+        }
+      }
+    );
+
     const timer = window.setInterval(async () => {
       const video = videoRef.current;
-      if (!video || cancelled || video.videoWidth === 0) return;
+      if (cancelled || busy || !video || video.videoWidth === 0) return;
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -225,29 +264,44 @@ export function LiveScreen({ actions, live }: { actions: Actions; live: Record<s
       context.drawImage(video, 0, 0);
       const hash = frameHash(canvas);
       if (hash === lastHash.current) return;
-      lastHash.current = hash;
+
+      busy = true;
       try {
-        const { createWorker } = await import("tesseract.js");
-        const worker = await createWorker("eng");
-        const recognized = await worker.recognize(canvas);
-        await worker.terminate();
-        const text = recognized.data.text.trim();
+        const text = await recognizeCanvas(canvas);
+        lastHash.current = hash;
+        if (cancelled) return;
+        setOcrState("sampling");
         if (text) {
-          await submitFrame({
+          await submitFrameRef.current({
             frame_id: `web-frame-${Date.now()}`,
             perceptual_hash: hash,
             ocr_text: text
           });
+          if (!cancelled) {
+            setFrameCount((current) => current + 1);
+          }
         }
-      } catch {
-        /* keep sampling */
+      } catch (cause) {
+        if (!cancelled) {
+          setOcrState("failed");
+          setOcrError(describeFrameError(cause));
+        }
+      } finally {
+        busy = false;
       }
     }, 2500);
+
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [live?.session_id, live?.stream, submitFrame]);
+  }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      void releaseOcrWorker();
+    };
+  }, []);
 
   return (
     <div className="screen">
@@ -260,12 +314,65 @@ export function LiveScreen({ actions, live }: { actions: Actions; live: Record<s
         <video ref={videoRef} muted playsInline style={{ width: "100%", maxHeight: 320, background: "#000", borderRadius: 12 }} />
         <div className="actions">
           <button className="button primary" onClick={actions.startLive}><Radio size={16} /><span>Start live session</span></button>
-          <button className="button" onClick={actions.verifyLive}>Verify stable text</button>
+          <button className="button" onClick={actions.verifyLive} disabled={!live?.session_id || !hasStableText}>
+            Verify stable text
+          </button>
         </div>
-        {live && <p className="muted">{String(live.stable_text || live.status || "Waiting for readable text.")}</p>}
+        {live ? (
+          <>
+            <div className="badge-list">
+              <span className="badge">{ocrStatusLabel(ocrState)}</span>
+              <span className="badge">{frameCount} frames sent</span>
+              <span className="badge">{String(live.buffer_chars ?? 0)} chars buffered</span>
+            </div>
+            {ocrState === "failed" ? (
+              <p className="muted" style={{ color: "var(--status-fake-text)" }}>{ocrError}</p>
+            ) : null}
+            <p className="muted">
+              {hasStableText
+                ? String(live.stable_text)
+                : String(live.status || "Waiting for readable text.")}
+            </p>
+            {!hasStableText && live.session_id && ocrState !== "failed" ? (
+              <p className="muted" style={{ fontSize: 12 }}>
+                Verification unlocks once OCR captures stable text from the shared screen.
+              </p>
+            ) : null}
+            {latestVerification ? (
+              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <p className="eyebrow">Latest verification</p>
+                <p style={{ fontWeight: 600 }}>
+                  {String(latestVerification.final_verdict || "Unknown")} · {String(latestVerification.confidence || "N/A")} confidence
+                </p>
+                {latestVerification.reason ? <p className="muted">{String(latestVerification.reason)}</p> : null}
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
     </div>
   );
+}
+
+function describeFrameError(cause: unknown) {
+  const error = cause as { message?: string; validationDetails?: Array<{ loc?: string[]; msg?: string }> };
+  const base = error?.message || String(cause);
+  const details = Array.isArray(error?.validationDetails) ? error.validationDetails : [];
+  if (details.length === 0) {
+    return base;
+  }
+  const readable = details
+    .map((detail) => `${Array.isArray(detail.loc) ? `${detail.loc.join(".")}: ` : ""}${detail.msg || ""}`.trim())
+    .filter(Boolean)
+    .join("; ");
+  return readable ? `${base} (${readable})` : base;
+}
+
+function ocrStatusLabel(state: "idle" | "starting" | "sampling" | "failed") {
+  if (state === "starting") return "Loading OCR engine";
+  if (state === "sampling") return "Reading screen";
+  if (state === "failed") return "OCR unavailable";
+  return "Idle";
 }
 
 export function ResultScreen({ result }: { result: Record<string, unknown> | null }) {

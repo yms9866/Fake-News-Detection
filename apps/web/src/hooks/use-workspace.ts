@@ -203,17 +203,41 @@ export function useWorkspace() {
       setLive((current) => ({ ...current, ...next }));
     },
     async verifyLive() {
-      if (!live?.session_id) return;
+      if (!live?.session_id) {
+        setError(normalizeUiError(new Error("Start a live session before verifying."), settings.backendOrigin));
+        return;
+      }
+      const stableText = String(live.stable_text || "").trim();
+      if (!stableText) {
+        setError({
+          code: "WEB_VALIDATION_ERROR",
+          message: "No stable text detected yet. Keep the live session running until readable text appears on screen.",
+          status: 0,
+          requestId: null,
+          traceId: null,
+          validationDetails: [],
+          backendOrigin: settings.backendOrigin,
+          technicalDetails: ""
+        });
+        return;
+      }
       await run("verify", async () => {
-        const next = await client.verifyLiveSession(String(live.session_id), { trigger: "user", force: true });
-        setLive(next);
-        const analysisId = next.analysis_id || next.verification_analysis_id || next.latest_analysis_id;
-        if (analysisId) {
-          const analyzed = await client.getAnalysis(String(analysisId));
-          setAnalysisResult(analyzed);
-          setHistoryList(history.add(compactHistoryItem(analyzed)));
-          routerNavigate("/result");
+        const next = await client.verifyLiveSession(String(live.session_id), {
+          trigger: "user",
+          force: true,
+          deep_check: settings.defaultDeepCheck,
+          max_length: settings.defaultMaxLength
+        });
+        setLive((current) => ({ ...current, ...next }));
+        const latest = next.latest_verification as { analysis_id?: string } | null | undefined;
+        const analysisId = latest?.analysis_id;
+        if (!analysisId) {
+          throw new Error("Verification completed without an analysis result. Try again after more text is captured.");
         }
+        const analyzed = await client.getAnalysis(String(analysisId));
+        setAnalysisResult(analyzed);
+        setHistoryList(history.add(compactHistoryItem(analyzed)));
+        routerNavigate("/result");
       });
     },
     async openHistory(item: { analysisId?: string }) {

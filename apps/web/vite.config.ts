@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 export default defineConfig({
   plugins: [react()],
   root: ".",
-  publicDir: false,
+  publicDir: "public",
   resolve: {
     alias: {
       "@fnd/client-sdk": resolve(import.meta.dirname, "../../packages/client-sdk/src/index.ts"),

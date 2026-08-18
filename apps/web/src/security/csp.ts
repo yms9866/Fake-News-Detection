@@ -1,6 +1,6 @@
 export const WEB_CSP = [
   "default-src 'self'",
-  "connect-src http://127.0.0.1:* http://localhost:* blob:",
+  "connect-src 'self' http://127.0.0.1:* http://localhost:* blob: data:",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "style-src 'self'",

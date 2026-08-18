@@ -4,6 +4,8 @@ import unittest
 
 from packages.backend.fnd.adapters.llm.gemini_grounding import (
     GeminiGroundedSearchEvidenceProvider,
+    is_grounding_redirect,
+    resolve_grounding_redirects,
 )
 from packages.backend.fnd.application.services.verdict_policy import VerdictPolicy
 from packages.backend.fnd.domain.entities import StyleAnalysis
@@ -134,26 +136,118 @@ class GeminiGroundedSearchEvidenceProviderTests(unittest.TestCase):
         self.assertEqual(evidence.items[0].qualification_status, "QUALIFIED")
         self.assertIn("google_search", calls[0]["payload"]["tools"][0])
 
-    def test_google_grounding_redirect_uses_source_title_as_publisher(self) -> None:
+    def test_google_grounding_redirect_is_resolved_to_the_publisher_url(self) -> None:
         response = _grounded_response()
         candidate = response["candidates"][0]
         grounding = candidate["groundingMetadata"]
+        redirect = (
+            "https://vertexaisearch.cloud.google.com/grounding-api-redirect/example"
+        )
         grounding["groundingChunks"][0]["web"] = {
-            "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/example",
+            "uri": redirect,
             "title": "reuters.com",
         }
         provider = GeminiGroundedSearchEvidenceProvider(
             api_key="test-key",
             transport=lambda *_: response,
+            redirect_resolver=lambda url, _timeout: (
+                "https://www.reuters.com/world/real-article-2026"
+                if url == redirect
+                else url
+            ),
         )
 
         context = provider.search("Example claim", max_results=6)
 
+        self.assertEqual(
+            context.reviewed_sources[0].url,
+            "https://www.reuters.com/world/real-article-2026",
+        )
         self.assertEqual(context.reviewed_sources[0].publisher, "reuters.com")
-        self.assertIn(
+        self.assertNotIn(
             "vertexaisearch.cloud.google.com",
             context.reviewed_sources[0].url,
         )
+
+    def test_unresolvable_redirect_keeps_the_original_citation(self) -> None:
+        response = _grounded_response()
+        candidate = response["candidates"][0]
+        grounding = candidate["groundingMetadata"]
+        redirect = (
+            "https://vertexaisearch.cloud.google.com/grounding-api-redirect/example"
+        )
+        grounding["groundingChunks"][0]["web"] = {
+            "uri": redirect,
+            "title": "reuters.com",
+        }
+
+        def failing_resolver(_url: str, _timeout: float) -> str:
+            raise RuntimeError("network unavailable")
+
+        provider = GeminiGroundedSearchEvidenceProvider(
+            api_key="test-key",
+            transport=lambda *_: response,
+            redirect_resolver=failing_resolver,
+        )
+
+        context = provider.search("Example claim", max_results=6)
+
+        self.assertEqual(context.reviewed_sources[0].url, redirect)
+        self.assertEqual(context.reviewed_sources[0].publisher, "reuters.com")
+
+    def test_direct_publisher_urls_are_never_resolved(self) -> None:
+        calls: list[str] = []
+
+        def tracking_resolver(url: str, _timeout: float) -> str:
+            calls.append(url)
+            return url
+
+        provider = GeminiGroundedSearchEvidenceProvider(
+            api_key="test-key",
+            transport=lambda *_: _grounded_response(),
+            redirect_resolver=tracking_resolver,
+        )
+
+        context = provider.search("Example claim", max_results=6)
+
+        self.assertEqual(calls, [])
+        self.assertEqual(context.reviewed_sources[0].url, "https://news.example/report")
+
+
+class GroundingRedirectHelperTests(unittest.TestCase):
+    def test_only_google_redirect_links_are_detected(self) -> None:
+        self.assertTrue(
+            is_grounding_redirect(
+                "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc"
+            )
+        )
+        self.assertFalse(is_grounding_redirect("https://reuters.com/article"))
+        self.assertFalse(is_grounding_redirect(""))
+
+    def test_redirect_chains_landing_on_another_redirect_are_rejected(self) -> None:
+        resolved = resolve_grounding_redirects(
+            ["https://vertexaisearch.cloud.google.com/grounding-api-redirect/a"],
+            lambda _url, _timeout: (
+                "https://vertexaisearch.cloud.google.com/grounding-api-redirect/b"
+            ),
+            1.0,
+        )
+        self.assertEqual(resolved, {})
+
+    def test_duplicate_redirects_are_resolved_once(self) -> None:
+        calls: list[str] = []
+
+        def resolver(url: str, _timeout: float) -> str:
+            calls.append(url)
+            return "https://reuters.com/article"
+
+        redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/a"
+        resolved = resolve_grounding_redirects(
+            [redirect, redirect, redirect], resolver, 1.0
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(resolved, {redirect: "https://reuters.com/article"})
 
     def test_grounded_sources_can_drive_existing_final_policy(self) -> None:
         provider = GeminiGroundedSearchEvidenceProvider(

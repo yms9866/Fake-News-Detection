@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any, cast
+import logging
 
 from packages.backend.fnd.adapters.jobs.in_memory import (
     InMemoryIdempotencyRepository,
@@ -43,6 +44,8 @@ from packages.contracts.python.analysis_contracts import (
 )
 
 from .serializers import analysis_response_from_result
+
+logger = logging.getLogger(__name__)
 
 AnalysisLookup = AnalysisResponse | PendingAnalysisResponse
 
@@ -255,6 +258,19 @@ class ApiContainer:
     def start(self) -> None:
         if self.job_queue is not None:
             self.job_queue.start()
+        self._warmup_style_model()
+
+    def _warmup_style_model(self) -> None:
+        style_model = getattr(self.workflow, "style_model", None)
+        warmup = getattr(style_model, "warmup", None)
+        if not callable(warmup):
+            return
+        try:
+            warmup()
+        except Exception:
+            logger.exception(
+                "Style model warmup failed; the first analysis may be slower."
+            )
 
     def stop(self) -> None:
         if self.job_queue is not None:

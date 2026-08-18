@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections import OrderedDict
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from hashlib import sha256
 import re
-from time import perf_counter
+from threading import Lock
+from time import perf_counter, time
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -22,6 +26,7 @@ from packages.backend.fnd.domain.entities import (
     SearchContext,
     SearchQueryRecord,
     SearchResult,
+    normalize_text,
 )
 from packages.backend.fnd.domain.enums import (
     EvidenceQuality,
@@ -31,10 +36,126 @@ from packages.backend.fnd.domain.enums import (
 )
 
 GEMINI_GENERATE_CONTENT_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/" "{model}:generateContent"
+    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 )
 
 JsonTransport = Callable[[str, dict[str, str], dict[str, Any], float], dict[str, Any]]
+
+# Google Search grounding hands back opaque redirect links instead of the
+# publisher URL, so citations must be resolved before they are shown or stored.
+GROUNDING_REDIRECT_HOST = "vertexaisearch.cloud.google.com"
+GEMINI_RUN_CACHE_TTL_SECONDS = 30 * 60
+GEMINI_RUN_CACHE_MAX_ENTRIES = 64
+
+
+class _TtlLruCache:
+    """Process-local cache for identical Gemini grounding runs."""
+
+    def __init__(self, *, max_entries: int, ttl_seconds: float) -> None:
+        self._max_entries = max_entries
+        self._ttl_seconds = ttl_seconds
+        self._lock = Lock()
+        self._items: OrderedDict[str, tuple[float, _GroundedRun]] = OrderedDict()
+
+    def get(self, key: str) -> _GroundedRun | None:
+        now = time()
+        with self._lock:
+            item = self._items.get(key)
+            if item is None:
+                return None
+            expires_at, value = item
+            if expires_at <= now:
+                del self._items[key]
+                return None
+            self._items.move_to_end(key)
+            return value
+
+    def set(self, key: str, value: _GroundedRun) -> None:
+        expires_at = time() + self._ttl_seconds
+        with self._lock:
+            self._items[key] = (expires_at, value)
+            self._items.move_to_end(key)
+            while len(self._items) > self._max_entries:
+                self._items.popitem(last=False)
+
+
+def _grounding_cache_key(claim_text: str, model_name: str) -> str:
+    normalized = normalize_text(claim_text).lower()
+    digest = sha256(f"{model_name}\n{normalized}".encode("utf-8")).hexdigest()
+    return digest
+
+
+RedirectResolver = Callable[[str, float], str]
+
+
+def _default_redirect_resolver(url: str, timeout_seconds: float) -> str:
+    import requests
+
+    try:
+        response = requests.head(url, allow_redirects=True, timeout=timeout_seconds)
+        if response.status_code >= 400:
+            response = requests.get(
+                url,
+                allow_redirects=True,
+                timeout=timeout_seconds,
+                stream=True,
+            )
+            response.close()
+        return str(response.url or "").strip() or url
+    except Exception:
+        return url
+
+
+def is_grounding_redirect(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return host == GROUNDING_REDIRECT_HOST or host.endswith(
+        f".{GROUNDING_REDIRECT_HOST}"
+    )
+
+
+def resolve_grounding_redirects(
+    urls: Iterable[str],
+    resolver: RedirectResolver,
+    timeout_seconds: float,
+) -> dict[str, str]:
+    """Maps grounding redirect links to their final publisher URL.
+
+    Unresolvable links are omitted so callers keep the original redirect rather
+    than losing the citation entirely.
+    """
+    targets = sorted({url for url in urls if url and is_grounding_redirect(url)})
+    if not targets:
+        return {}
+
+    resolved: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool:
+        pending = {pool.submit(resolver, url, timeout_seconds): url for url in targets}
+        for future in as_completed(pending):
+            original = pending[future]
+            try:
+                final = str(future.result() or "").strip()
+            except Exception:
+                continue
+            if final and final != original and not is_grounding_redirect(final):
+                resolved[original] = final
+    return resolved
+
+
+def _chunk_urls(metadata: dict[str, Any]) -> tuple[str, ...]:
+    chunks = metadata.get("groundingChunks")
+    if not isinstance(chunks, list):
+        return ()
+    urls: list[str] = []
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
+            continue
+        web = chunk.get("web")
+        if not isinstance(web, dict):
+            continue
+        url = str(web.get("uri") or "").strip()
+        if url:
+            urls.append(url)
+    return tuple(urls)
 
 
 def _default_transport(
@@ -183,10 +304,13 @@ def _grounding_passages(
 def _grounded_items(
     metadata: dict[str, Any],
     parsed: dict[str, Any],
+    resolved_urls: dict[str, str] | None = None,
 ) -> tuple[EvidenceItem, ...]:
     chunks = metadata.get("groundingChunks")
     if not isinstance(chunks, list):
         return ()
+
+    resolved_urls = resolved_urls or {}
 
     assessments = _source_assessments(parsed)
     passages = _grounding_passages(metadata)
@@ -198,9 +322,10 @@ def _grounded_items(
         web = chunk.get("web")
         if not isinstance(web, dict):
             continue
-        url = str(web.get("uri") or "").strip()
-        if not url:
+        redirect_url = str(web.get("uri") or "").strip()
+        if not redirect_url:
             continue
+        url = resolved_urls.get(redirect_url, redirect_url)
 
         assessment = assessments.get(index, {})
         stance = _normalize_stance(assessment.get("stance"))
@@ -374,13 +499,21 @@ class GeminiGroundedSearchEvidenceProvider:
         model_name: str = "gemini-2.5-flash",
         timeout_seconds: float = 30.0,
         transport: JsonTransport = _default_transport,
+        redirect_resolver: RedirectResolver = _default_redirect_resolver,
+        redirect_timeout_seconds: float = 8.0,
     ) -> None:
         self.api_key = api_key
         self.model_name = model_name
         self.timeout_seconds = timeout_seconds
         self.transport = transport
+        self.redirect_resolver = redirect_resolver
+        self.redirect_timeout_seconds = redirect_timeout_seconds
         self._cached_claim: str | None = None
         self._cached_run: _GroundedRun | None = None
+        self._run_cache = _TtlLruCache(
+            max_entries=GEMINI_RUN_CACHE_MAX_ENTRIES,
+            ttl_seconds=GEMINI_RUN_CACHE_TTL_SECONDS,
+        )
 
     def search(self, claim_text: str, max_results: int) -> SearchContext:
         del max_results  # Gemini controls the number of grounded search results.
@@ -399,6 +532,11 @@ class GeminiGroundedSearchEvidenceProvider:
         return self._run(claim_text).evidence
 
     def _run(self, claim_text: str) -> _GroundedRun:
+        cache_key = _grounding_cache_key(claim_text, self.model_name)
+        cached = self._run_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         if not self.api_key:
             context = SearchContext(
                 query=claim_text,
@@ -452,7 +590,12 @@ class GeminiGroundedSearchEvidenceProvider:
             parsed = parse_ai_json(output)
             metadata = candidate.get("groundingMetadata")
             metadata = metadata if isinstance(metadata, dict) else {}
-            items = _grounded_items(metadata, parsed)
+            resolved_urls = resolve_grounding_redirects(
+                _chunk_urls(metadata),
+                self.redirect_resolver,
+                self.redirect_timeout_seconds,
+            )
+            items = _grounded_items(metadata, parsed, resolved_urls)
             context = _search_context(claim_text, metadata, items, duration_ms)
             grounding_used = bool(items) and bool(metadata.get("groundingSupports"))
 
@@ -493,7 +636,10 @@ class GeminiGroundedSearchEvidenceProvider:
                 ),
                 raw_context=output,
             )
-            return _GroundedRun(context=context, evidence=evidence)
+            run = _GroundedRun(context=context, evidence=evidence)
+            if not evidence.error:
+                self._run_cache.set(cache_key, run)
+            return run
         except Exception as exc:
             context = SearchContext(
                 query=claim_text,

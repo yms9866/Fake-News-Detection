@@ -82,6 +82,10 @@ class ModernBertStyleModel:
                 label_map=_label_map_for_log(label_signal_map),
             )
 
+    def warmup(self) -> None:
+        """Load weights so the first user request does not pay initialization."""
+        self._load_once()
+
     def label_map(self) -> dict[int, str]:
         if self._label_signal_map is None:
             self._label_signal_map = resolve_style_label_mapping(

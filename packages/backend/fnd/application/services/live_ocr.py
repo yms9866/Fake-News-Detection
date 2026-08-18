@@ -13,6 +13,7 @@ from packages.backend.fnd.application.workflows.analyze_content import (
     AnalyzeContentWorkflow,
 )
 from packages.backend.fnd.domain.entities import (
+    AnalysisResult,
     ExtractedDocument,
     normalize_text,
     utc_now,
@@ -72,6 +73,12 @@ class VerifyLiveSessionCommand:
     deep_check: bool = False
     max_length: int | None = None
     force: bool = False
+
+
+@dataclass(frozen=True)
+class VerifyLiveSessionResult:
+    session: LiveSession
+    analysis: AnalysisResult | None = None
 
 
 class RuleBasedLiveCoherenceCleaner:
@@ -233,10 +240,10 @@ class LiveOcrSessionService:
         )
         return session
 
-    def verify(self, command: VerifyLiveSessionCommand) -> LiveSession:
+    def verify(self, command: VerifyLiveSessionCommand) -> VerifyLiveSessionResult:
         session = self.get(command.session_id)
         if not normalize_text(session.stable_text):
-            return session
+            return VerifyLiveSessionResult(session=session)
 
         now = self._now()
         if (
@@ -254,7 +261,7 @@ class LiveOcrSessionService:
                     "code": LIVE_VERIFICATION_RATE_LIMITED,
                 },
             )
-            return session
+            return VerifyLiveSessionResult(session=session)
 
         document = ExtractedDocument(
             input_type=InputType.DIRECT_TEXT,
@@ -271,8 +278,9 @@ class LiveOcrSessionService:
             deep_check=command.deep_check,
             max_length=command.max_length,
         )
+        analysis_id = str(uuid4())
         session.latest_verification = LiveVerificationSnapshot(
-            analysis_id=str(uuid4()),
+            analysis_id=analysis_id,
             trigger=command.trigger,
             final_verdict=result.final.verdict.value,
             confidence=result.final.confidence.value,
@@ -289,10 +297,10 @@ class LiveOcrSessionService:
             "Live OCR buffer verified through the shared analysis workflow.",
             {
                 "trigger": command.trigger.value,
-                "analysis_id": session.latest_verification.analysis_id,
+                "analysis_id": analysis_id,
             },
         )
-        return session
+        return VerifyLiveSessionResult(session=session, analysis=result)
 
     def _stabilize(self, session: LiveSession, cleaned: str) -> None:
         if not cleaned:

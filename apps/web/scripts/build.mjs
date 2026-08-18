@@ -5,6 +5,7 @@ import * as esbuild from "esbuild";
 
 const root = join(import.meta.dirname, "..");
 
+await import("./vendor-tesseract.mjs");
 await viteBuild({ configFile: join(root, "vite.config.ts") });
 await copyFile(join(root, "dist/bundle.js"), join(root, "dist/main.js")).catch(async () => {
   await mkdir(join(root, "dist"), { recursive: true });
