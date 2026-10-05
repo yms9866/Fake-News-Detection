@@ -13,6 +13,7 @@ import {
 } from "../capture/browser-capture";
 
 export type WebSettings = {
+  settingsVersion?: number;
   backendOrigin: string;
   defaultDeepCheck: boolean;
   defaultMaxLength: number;
@@ -20,26 +21,42 @@ export type WebSettings = {
 };
 
 const SETTINGS_KEY = "fnd.web.settings";
+const SETTINGS_SCHEMA_VERSION = 2;
+const DEFAULT_TIMEOUT_MS = 120000;
 
 export function defaultSettings(): WebSettings {
   return {
+    settingsVersion: SETTINGS_SCHEMA_VERSION,
     backendOrigin: "http://127.0.0.1:8000",
     defaultDeepCheck: true,
     defaultMaxLength: 512,
-    requestTimeoutMs: 60000
+    requestTimeoutMs: DEFAULT_TIMEOUT_MS
   };
 }
 
 export function loadSettings(): WebSettings {
+  const defaults = defaultSettings();
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) {
-      return { ...defaultSettings(), ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw) as Partial<WebSettings>;
+      const storedVersion = Number(parsed.settingsVersion) || 1;
+      const timeoutMs = Number(parsed.requestTimeoutMs) || defaults.requestTimeoutMs;
+      return {
+        ...defaults,
+        ...parsed,
+        settingsVersion: SETTINGS_SCHEMA_VERSION,
+        defaultDeepCheck: storedVersion < SETTINGS_SCHEMA_VERSION ? true : Boolean(parsed.defaultDeepCheck),
+        requestTimeoutMs:
+          storedVersion < SETTINGS_SCHEMA_VERSION
+            ? Math.max(timeoutMs, DEFAULT_TIMEOUT_MS)
+            : timeoutMs
+      };
     }
   } catch {
     /* ignore */
   }
-  return defaultSettings();
+  return defaults;
 }
 
 function normalizeUiError(error: unknown, origin: string) {
@@ -133,8 +150,13 @@ export function useWorkspace() {
       routerNavigate(`/${newRoute}`);
     },
     saveSettings(next: WebSettings) {
-      setSettings(next);
-      client.configure(next);
+      const normalized: WebSettings = {
+        ...defaultSettings(),
+        ...next,
+        settingsVersion: SETTINGS_SCHEMA_VERSION
+      };
+      setSettings(normalized);
+      client.configure(normalized);
     },
     async checkConnection() {
       setConnection({ status: "checking", origin: settings.backendOrigin });

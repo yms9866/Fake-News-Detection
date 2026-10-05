@@ -51,6 +51,17 @@ export function mapBackendError(errorPayload, fallbackCode = EXTENSION_ERROR_COD
   );
 }
 
+export function mapSdkErrorCode(code) {
+  const mapped = {
+    FND_REQUEST_TIMEOUT: EXTENSION_ERROR_CODES.requestTimeout,
+    FND_CONNECTION_REFUSED: EXTENSION_ERROR_CODES.backendUnavailable,
+    FND_CORS_OR_NETWORK_FAILURE: EXTENSION_ERROR_CODES.backendUnavailable,
+    FND_INVALID_BACKEND_ORIGIN: EXTENSION_ERROR_CODES.invalidSettings,
+    FND_EMPTY_TEXT: EXTENSION_ERROR_CODES.noSelectedText
+  };
+  return mapped[code] || code;
+}
+
 export function safeErrorPayload(error) {
   if (error instanceof ExtensionError) {
     return {
@@ -59,6 +70,15 @@ export function safeErrorPayload(error) {
       backendCode: error.backendCode,
       requestId: error.requestId,
       traceId: error.traceId
+    };
+  }
+  if (error && typeof error === "object" && error.code && error.message) {
+    return {
+      code: mapSdkErrorCode(error.code),
+      message: sanitizeMessage(error.message),
+      requestId: error.requestId || null,
+      traceId: error.traceId || null,
+      backendCode: error.code
     };
   }
   return {

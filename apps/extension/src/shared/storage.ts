@@ -2,6 +2,8 @@ import {
   DEFAULT_BACKEND_ORIGIN,
   DEFAULT_MAX_LENGTH,
   DEFAULT_TIMEOUT_MS,
+  MAX_TIMEOUT_MS,
+  SETTINGS_SCHEMA_VERSION,
   STORAGE_KEYS
 } from "./constants.js";
 import { EXTENSION_ERROR_CODES, ExtensionError } from "./errors.js";
@@ -10,9 +12,10 @@ const memoryLocal = new Map();
 const memorySession = new Map();
 
 export const DEFAULT_SETTINGS = {
+  settingsVersion: SETTINGS_SCHEMA_VERSION,
   backendOrigin: DEFAULT_BACKEND_ORIGIN,
   pairingToken: "",
-  defaultDeepCheck: false,
+  defaultDeepCheck: true,
   defaultMaxLength: DEFAULT_MAX_LENGTH,
   requestTimeoutMs: DEFAULT_TIMEOUT_MS,
   showOverlayAutomatically: true,
@@ -94,21 +97,33 @@ export function normalizeBackendOrigin(value) {
 }
 
 export function normalizeSettings(raw) {
-  const merged = { ...DEFAULT_SETTINGS, ...(raw || {}) };
+  const incoming = raw || {};
+  const storedVersion = Number(incoming.settingsVersion) || 1;
+  const merged = { ...DEFAULT_SETTINGS, ...incoming };
+  const timeoutMs = Math.min(
+    MAX_TIMEOUT_MS,
+    Math.max(1000, Number(merged.requestTimeoutMs) || DEFAULT_TIMEOUT_MS)
+  );
   return {
     ...merged,
+    settingsVersion: SETTINGS_SCHEMA_VERSION,
     backendOrigin: normalizeBackendOrigin(merged.backendOrigin),
     pairingToken: String(merged.pairingToken || "").trim(),
-    defaultDeepCheck: Boolean(merged.defaultDeepCheck),
+    defaultDeepCheck: storedVersion < SETTINGS_SCHEMA_VERSION ? true : Boolean(merged.defaultDeepCheck),
     defaultMaxLength: Math.min(8192, Math.max(128, Number(merged.defaultMaxLength) || DEFAULT_MAX_LENGTH)),
-    requestTimeoutMs: Math.min(120000, Math.max(1000, Number(merged.requestTimeoutMs) || DEFAULT_TIMEOUT_MS)),
+    requestTimeoutMs: storedVersion < SETTINGS_SCHEMA_VERSION ? Math.max(timeoutMs, DEFAULT_TIMEOUT_MS) : timeoutMs,
     showOverlayAutomatically: Boolean(merged.showOverlayAutomatically),
     storeLatestAnalysisReference: Boolean(merged.storeLatestAnalysisReference)
   };
 }
 
 export async function getSettings() {
-  return normalizeSettings(await getFrom("local", STORAGE_KEYS.settings, DEFAULT_SETTINGS));
+  const stored = await getFrom("local", STORAGE_KEYS.settings, DEFAULT_SETTINGS);
+  const normalized = normalizeSettings(stored);
+  if (!stored || Number(stored.settingsVersion) !== SETTINGS_SCHEMA_VERSION) {
+    await setTo("local", { [STORAGE_KEYS.settings]: normalized });
+  }
+  return normalized;
 }
 
 export async function saveSettings(settings) {
@@ -134,7 +149,8 @@ export async function getLatestSummary() {
 }
 
 export async function saveLatestSummary(summary) {
-  await setTo("local", { [STORAGE_KEYS.latestSummary]: summary });
+  const payload = JSON.parse(JSON.stringify(summary || {}));
+  await setTo("local", { [STORAGE_KEYS.latestSummary]: payload });
 }
 
 export async function clearExtensionState() {

@@ -33,7 +33,7 @@ def build_analyze_content_workflow(settings: Settings) -> AnalyzeContentWorkflow
         provider = GeminiGroundedSearchEvidenceProvider(
             api_key=settings.gemini_api_key,
             model_name=settings.gemini_model,
-            timeout_seconds=settings.request_timeout_seconds,
+            timeout_seconds=settings.gemini_timeout_seconds,
         )
         search_provider = provider
         evidence_provider = provider

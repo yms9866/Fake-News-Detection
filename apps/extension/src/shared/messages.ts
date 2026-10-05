@@ -5,6 +5,7 @@ export const MESSAGE_TYPES = {
   analyzeUrl: "ANALYZE_URL",
   captureVisibleTab: "CAPTURE_VISIBLE_TAB",
   getAnalysisState: "GET_ANALYSIS_STATE",
+  getLatestReport: "GET_LATEST_REPORT",
   cancelJob: "CANCEL_JOB",
   showOverlay: "SHOW_OVERLAY",
   dismissOverlay: "DISMISS_OVERLAY",

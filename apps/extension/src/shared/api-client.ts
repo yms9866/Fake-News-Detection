@@ -1,12 +1,15 @@
 import { FndApiClient, FndApiClientSettings } from "@fnd/client-sdk";
+import { DEFAULT_BACKEND_ORIGIN, DEFAULT_TIMEOUT_MS } from "./constants.js";
 
 export class ApiClient extends FndApiClient {
   credentials: FndApiClientSettings;
 
   constructor(credentials: FndApiClientSettings = {}) {
+    const timeoutMs = credentials.requestTimeoutMs || credentials.timeoutMs || DEFAULT_TIMEOUT_MS;
     super({
-      backendOrigin: credentials.backendOrigin || "http://127.0.0.1:8000",
-      requestTimeoutMs: credentials.requestTimeoutMs || 15000,
+      backendOrigin: credentials.backendOrigin || DEFAULT_BACKEND_ORIGIN,
+      requestTimeoutMs: timeoutMs,
+      analysisTimeoutMs: credentials.analysisTimeoutMs || timeoutMs,
       pairingToken: credentials.pairingToken || null,
       originPolicy: "loopback"
     });

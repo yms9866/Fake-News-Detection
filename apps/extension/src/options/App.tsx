@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from "../shared/storage.js";
 import { MESSAGE_TYPES, makeMessage } from "../shared/messages.js";
+import { button, div, el } from "../ui/dom.js";
 
 export function renderOptions(root) {
   const state = {
@@ -16,7 +17,9 @@ export function renderOptions(root) {
 
   async function save() {
     state.error = "";
-    const response = await chrome.runtime.sendMessage(makeMessage(MESSAGE_TYPES.saveSettings, readForm(root)));
+    const response = await chrome.runtime.sendMessage(
+      makeMessage(MESSAGE_TYPES.saveSettings, readForm(root))
+    );
     if (response.ok) {
       state.settings = response.settings;
       state.message = "Settings saved.";
@@ -28,29 +31,47 @@ export function renderOptions(root) {
 
   async function clearState() {
     await chrome.runtime.sendMessage(makeMessage(MESSAGE_TYPES.clearState));
-    state.message = "Stored extension state cleared.";
+    state.message = "Stored analysis references cleared.";
     draw();
   }
 
   async function testConnection() {
     const response = await chrome.runtime.sendMessage(makeMessage(MESSAGE_TYPES.testConnection));
-    state.message = response.ok ? "Backend connection works." : "";
+    state.message = response.ok ? "Local API is reachable and ready." : "";
     state.error = response.ok ? "" : response.error.message;
     draw();
   }
 
   function draw() {
     root.replaceChildren();
-    root.append(el("h1", "Extension settings"));
+    const shell = div("shell");
+    const top = div("topbar");
+    const brand = div("brand");
+    brand.append(el("span", "FND", "brand-mark"));
+    const titles = div();
+    titles.append(el("h1", "Extension settings"));
+    titles.append(el("p", "Local companion for the analysis API", "subtitle"));
+    brand.append(titles);
+    top.append(brand);
+    shell.append(top);
+
     const form = document.createElement("form");
+    form.className = "form-card";
+    form.append(el("div", "Connection", "section-title"));
     form.append(
-      field("Backend origin", "backendOrigin", state.settings.backendOrigin),
-      field("Optional pairing token", "pairingToken", state.settings.pairingToken || "", "password"),
-      field("Maximum length", "defaultMaxLength", String(state.settings.defaultMaxLength), "number"),
-      field("Request timeout ms", "requestTimeoutMs", String(state.settings.requestTimeoutMs), "number"),
-      checkbox("Style analysis + factual verification", "defaultDeepCheck", state.settings.defaultDeepCheck),
-      checkbox("Show page overlay automatically", "showOverlayAutomatically", state.settings.showOverlayAutomatically),
-      checkbox("Store latest analysis reference", "storeLatestAnalysisReference", state.settings.storeLatestAnalysisReference)
+      field("Backend origin", "backendOrigin", state.settings.backendOrigin, "text", "Only localhost or 127.0.0.1"),
+      field("Pairing token", "pairingToken", state.settings.pairingToken || "", "password", "Optional. Sent as X-FND-Pairing-Token."),
+      field("Request timeout (ms)", "requestTimeoutMs", String(state.settings.requestTimeoutMs), "number", "Deep check often needs 60–120 seconds.")
+    );
+    form.append(el("div", "Analysis", "section-title"));
+    form.append(
+      field("Maximum length", "defaultMaxLength", String(state.settings.defaultMaxLength), "number", "Tokens sent to the local style model."),
+      toggle("Run factual verification (deep check)", "defaultDeepCheck", state.settings.defaultDeepCheck)
+    );
+    form.append(el("div", "Display", "section-title"));
+    form.append(
+      toggle("Show a result overlay on the page", "showOverlayAutomatically", state.settings.showOverlayAutomatically),
+      toggle("Remember the latest analysis", "storeLatestAnalysisReference", state.settings.storeLatestAnalysisReference)
     );
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -58,22 +79,27 @@ export function renderOptions(root) {
     });
     const saveButton = document.createElement("button");
     saveButton.type = "submit";
+    saveButton.className = "primary-btn";
     saveButton.textContent = "Save settings";
     form.append(saveButton);
-    root.append(form);
-    const actions = div("actions");
+    shell.append(form);
+
+    const actions = div("utility-row");
     actions.append(
-      button("Test connection", testConnection),
-      button("Clear stored state", clearState)
+      button("Test connection", testConnection, "ghost"),
+      button("Clear stored results", clearState, "ghost")
     );
-    root.append(actions);
-    root.append(el("p", "Local mode accepts only localhost or loopback backend origins.", "muted"));
+    shell.append(actions);
+    shell.append(el("p", "This extension only talks to a loopback API. Provider keys stay on the backend.", "muted"));
     if (state.message) {
-      root.append(el("p", state.message, "status"));
+      shell.append(el("p", state.message, "status-ok"));
     }
     if (state.error) {
-      root.append(el("p", state.error, "error"));
+      const error = div("error-banner");
+      error.textContent = state.error;
+      shell.append(error);
     }
+    root.append(shell);
   }
 
   void load();
@@ -94,48 +120,29 @@ function readForm(root) {
   return data;
 }
 
-function field(label, name, value, type = "text") {
-  const wrapper = div("status");
+function field(label, name, value, type, hint) {
+  const wrapper = div("field");
   const input = document.createElement("input");
   input.name = name;
   input.type = type;
   input.value = value;
-  input.style.width = "100%";
   input.setAttribute("aria-label", label);
   wrapper.append(el("label", label), input);
+  if (hint) {
+    wrapper.append(el("p", hint, "muted"));
+  }
   return wrapper;
 }
 
-function checkbox(label, name, checked) {
-  const wrapper = div("status");
+function toggle(label, name, checked) {
+  const wrapper = div("toggle");
   const input = document.createElement("input");
   input.name = name;
   input.type = "checkbox";
   input.checked = Boolean(checked);
   input.setAttribute("aria-label", label);
-  wrapper.append(input, el("span", ` ${label}`));
+  const copy = div();
+  copy.append(el("label", label));
+  wrapper.append(input, copy);
   return wrapper;
-}
-
-function button(label, handler) {
-  const node = document.createElement("button");
-  node.type = "button";
-  node.textContent = label;
-  node.addEventListener("click", handler);
-  return node;
-}
-
-function div(className) {
-  const node = document.createElement("div");
-  node.className = className;
-  return node;
-}
-
-function el(tag, text, className = "") {
-  const node = document.createElement(tag);
-  node.textContent = text;
-  if (className) {
-    node.className = className;
-  }
-  return node;
 }

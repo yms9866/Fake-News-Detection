@@ -62,6 +62,10 @@ test("deterministic article and screenshot flow uses backend contracts", async (
   assert.equal(textResult.input_type, "text");
   assert.equal(upload.job_id, "job-1");
   assert.equal(summary.finalVerdict, "UNVERIFIED");
+  assert.equal(summary.sources.length, 1);
+  assert.equal(summary.sources[0].url, "https://news.example/minister");
+  assert.equal(summary.searchSummary.queries[0].query, "minister resigned inquiry report");
+  assert.equal(summary.claims[0].claimText.includes("minister resigned"), true);
   assert.equal(calls.filter((call) => call.url.endsWith("/v1/analyses/image")).length, 1);
   assert.equal(calls.some((call) => call.init.body instanceof FormData), true);
 });
@@ -104,6 +108,41 @@ function analysis(id) {
       limitation: "This assessment evaluates writing patterns only. Writing style alone cannot establish whether the claims are true or false."
     },
     verification: null,
+    search_summary: {
+      scope: "Gemini searches the live public web with Google Search grounding.",
+      queries: [{ query: "minister resigned inquiry report" }],
+      total_queries: 1,
+      total_results: 2,
+      reviewed_source_count: 1,
+      qualifying_source_count: 1,
+      limitations: []
+    },
+    sources: [
+      {
+        source_id: "s1",
+        citation_label: "S1",
+        url: "https://news.example/minister",
+        title: "Minister resigns after inquiry",
+        publisher: "Example Daily",
+        domain: "news.example",
+        source_type: "REPUTABLE_NEWS",
+        reliability: "HIGH",
+        stance: "SUPPORTS",
+        fetched: true,
+        fetch_message: "",
+        qualification: "qualifies",
+        qualification_explanation: "Independent reporting of the same event."
+      }
+    ],
+    claims: [
+      {
+        sequence: 1,
+        claim_text: "The minister resigned after an inquiry.",
+        verification_status: "SUPPORTED",
+        confidence: "MEDIUM",
+        explanation: "Covered by independent reporting."
+      }
+    ],
     final_verdict: "UNVERIFIED",
     confidence: "LOW",
     reason: "Factual verification was not performed.",

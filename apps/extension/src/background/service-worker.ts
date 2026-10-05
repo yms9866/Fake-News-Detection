@@ -4,14 +4,16 @@ import { analyzeSelection, runControllerAction } from "./analysis-controller.js"
 import { resumeActiveJobMonitoring } from "./job-monitor.js";
 
 registerMessageRouter();
+void ensureContextMenus();
 void resumeActiveJobMonitoring();
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "fnd-analyze-selection",
-    title: "Analyze selected text",
-    contexts: ["selection"]
-  });
+  void ensureContextMenus();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void ensureContextMenus();
+  void resumeActiveJobMonitoring();
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -24,11 +26,19 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  void resumeActiveJobMonitoring();
-});
-
 chrome.action.onClicked.addListener(() => {
   chrome.runtime.sendMessage(makeMessage(MESSAGE_TYPES.getAnalysisState));
 });
 
+async function ensureContextMenus() {
+  try {
+    await chrome.contextMenus.removeAll();
+    chrome.contextMenus.create({
+      id: "fnd-analyze-selection",
+      title: "Analyze selected text",
+      contexts: ["selection"]
+    });
+  } catch {
+    /* contextMenus may be unavailable in tests */
+  }
+}

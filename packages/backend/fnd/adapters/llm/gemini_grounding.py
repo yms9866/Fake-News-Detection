@@ -7,9 +7,11 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from hashlib import sha256
+import json
+import logging
 import re
 from threading import Lock
-from time import perf_counter, time
+from time import perf_counter, sleep, time
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -46,6 +48,7 @@ JsonTransport = Callable[[str, dict[str, str], dict[str, Any], float], dict[str,
 GROUNDING_REDIRECT_HOST = "vertexaisearch.cloud.google.com"
 GEMINI_RUN_CACHE_TTL_SECONDS = 30 * 60
 GEMINI_RUN_CACHE_MAX_ENTRIES = 64
+logger = logging.getLogger(__name__)
 
 
 class _TtlLruCache:
@@ -166,17 +169,60 @@ def _default_transport(
 ) -> dict[str, Any]:
     import requests
 
-    response = requests.post(
-        url,
-        headers=headers,
-        json=payload,
-        timeout=timeout_seconds,
-    )
-    response.raise_for_status()
-    data = response.json()
-    if not isinstance(data, dict):
-        raise ValueError("Gemini returned a non-object response.")
-    return data
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=timeout_seconds,
+            )
+        except requests.Timeout as exc:
+            raise TimeoutError(
+                f"Gemini request timed out after {timeout_seconds:.0f}s"
+            ) from exc
+
+        if response.status_code == 429 and attempt == 0:
+            last_error = RuntimeError(_http_error_detail(429, response.text))
+            sleep(2)
+            continue
+        if response.status_code >= 400:
+            raise RuntimeError(_http_error_detail(response.status_code, response.text))
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError("Gemini returned a non-object response.")
+        return data
+    raise last_error or RuntimeError("HTTP_429: Resource exhausted")
+
+
+def _http_error_detail(status_code: int, body: str) -> str:
+    message = ""
+    try:
+        parsed = json.loads(body or "")
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        error = parsed.get("error")
+        if isinstance(error, dict):
+            message = str(error.get("message") or error.get("status") or "").strip()
+        elif parsed.get("message"):
+            message = str(parsed.get("message")).strip()
+    if not message:
+        message = re.sub(r"\s+", " ", (body or ""))[:180].strip()
+    return f"HTTP_{status_code}: {message}"[:240]
+
+
+def _no_candidate_reason(response: dict[str, Any]) -> str:
+    feedback = response.get("promptFeedback")
+    if isinstance(feedback, dict):
+        reason = str(feedback.get("blockReason") or "").strip()
+        if reason:
+            return f"Gemini blocked the prompt ({reason})."
+    error = response.get("error")
+    if isinstance(error, dict) and error.get("message"):
+        return f"Gemini returned no candidate: {error.get('message')}"
+    return "Gemini returned no candidate."
 
 
 def _normalize_stance(value: Any) -> EvidenceStance:
@@ -432,12 +478,24 @@ def _search_context(
     )
 
 
+def _bounded_claim(claim_text: str, max_chars: int = 4000) -> str:
+    text = normalize_text(claim_text)
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    for delimiter in (". ", "? ", "! "):
+        index = truncated.rfind(delimiter)
+        if index >= max_chars // 2:
+            return truncated[: index + 1].strip()
+    return truncated.rsplit(" ", 1)[0].strip() or truncated.strip()
+
+
 def _prompt(claim_text: str) -> str:
     return f"""
 Fact-check the claim or article below using Google Search.
 
 Claim/article:
-\"\"\"{claim_text}\"\"\"
+\"\"\"{_bounded_claim(claim_text)}\"\"\"
 
 Search the live public web before deciding. Prefer official statements, primary
 sources, wire services, established news organizations, and recognized
@@ -497,7 +555,7 @@ class GeminiGroundedSearchEvidenceProvider:
         self,
         api_key: str | None,
         model_name: str = "gemini-2.5-flash",
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 90.0,
         transport: JsonTransport = _default_transport,
         redirect_resolver: RedirectResolver = _default_redirect_resolver,
         redirect_timeout_seconds: float = 8.0,
@@ -508,6 +566,11 @@ class GeminiGroundedSearchEvidenceProvider:
         self.transport = transport
         self.redirect_resolver = redirect_resolver
         self.redirect_timeout_seconds = redirect_timeout_seconds
+        logger.info(
+            "gemini_grounding_ready model=%s timeout_seconds=%s",
+            self.model_name,
+            self.timeout_seconds,
+        )
         self._cached_claim: str | None = None
         self._cached_run: _GroundedRun | None = None
         self._run_cache = _TtlLruCache(
@@ -581,7 +644,7 @@ class GeminiGroundedSearchEvidenceProvider:
             duration_ms = (perf_counter() - started) * 1000
             candidates = response.get("candidates")
             if not isinstance(candidates, list) or not candidates:
-                raise ValueError("Gemini returned no candidate.")
+                raise ValueError(_no_candidate_reason(response))
             candidate = candidates[0]
             if not isinstance(candidate, dict):
                 raise ValueError("Gemini returned an invalid candidate.")
@@ -641,6 +704,10 @@ class GeminiGroundedSearchEvidenceProvider:
                 self._run_cache.set(cache_key, run)
             return run
         except Exception as exc:
+            if "HTTP_429" in str(exc):
+                logger.warning("Gemini Google Search grounding failed: %s", exc)
+            else:
+                logger.exception("Gemini Google Search grounding failed")
             context = SearchContext(
                 query=claim_text,
                 error="GEMINI_GROUNDED_SEARCH_FAILED",
@@ -656,6 +723,18 @@ class GeminiGroundedSearchEvidenceProvider:
                     "Check GEMINI_API_KEY, model access, quota, and internet access."
                 ),
                 grounding_used=False,
-                error=f"GEMINI_GROUNDED_SEARCH_FAILED: {type(exc).__name__}",
+                error=_public_gemini_error(exc),
             )
             return _GroundedRun(context=context, evidence=evidence)
+
+
+def _public_gemini_error(exc: BaseException) -> str:
+    detail = str(exc).strip().replace("\n", " ")
+    lowered = detail.lower()
+    if (
+        detail.startswith("HTTP_")
+        or "timed out" in lowered
+        or lowered.startswith("gemini ")
+    ):
+        return f"GEMINI_GROUNDED_SEARCH_FAILED: {type(exc).__name__}: {detail[:180]}"
+    return f"GEMINI_GROUNDED_SEARCH_FAILED: {type(exc).__name__}"

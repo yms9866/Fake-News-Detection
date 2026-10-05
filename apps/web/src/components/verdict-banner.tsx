@@ -75,6 +75,11 @@ export function VerdictBanner({ result }: { result: any }) {
       </div>
 
       <p className="verdict-summary">{reason}</p>
+      {Array.isArray(result?.warnings) && result.warnings.length > 0 ? (
+        <p className="muted" style={{ marginTop: 10 }}>
+          {textOnly(result.warnings[0])}
+        </p>
+      ) : null}
     </motion.div>
   );
 }

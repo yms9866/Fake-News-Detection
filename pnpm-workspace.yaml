@@ -10,6 +10,7 @@ onlyBuiltDependencies:
   - tesseract.js
 minimumReleaseAgeExclude:
   - lucide-react@1.30.0
+  - expo-image-picker@57.0.12
 allowBuilds:
   esbuild: true
   tesseract.js: true

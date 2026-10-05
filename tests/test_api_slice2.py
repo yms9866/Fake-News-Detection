@@ -392,6 +392,24 @@ class ApiSlice2Tests(unittest.TestCase):
             response.headers["access-control-allow-headers"],
         )
 
+    def test_cors_preflight_accepts_chrome_extension_origin(self) -> None:
+        origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+        response = self.client.options(
+            "/v1/analyses/text",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Content-Type,X-FND-Pairing-Token",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], origin)
+        self.assertIn(
+            "X-FND-Pairing-Token",
+            response.headers["access-control-allow-headers"],
+        )
+
     def test_cors_rejects_unconfigured_origin(self) -> None:
         response = self.client.get(
             "/v1/health/live",

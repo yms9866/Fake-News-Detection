@@ -21,6 +21,11 @@ export async function testConnection() {
       "Backend liveness check failed."
     );
   }
+  if (!ready || ready.status !== "ready") {
+    throw new ExtensionError(
+      EXTENSION_ERROR_CODES.backendNotReady,
+      "Backend is reachable but not ready. Check that the local model is available."
+    );
+  }
   return { ok: true, live, ready, models };
 }
-

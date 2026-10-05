@@ -157,7 +157,7 @@ export class FndApiClient {
       settings.backendOrigin || settings.apiUrl || "http://127.0.0.1:8000",
       this.originPolicy
     );
-    this.timeoutMs = settings.requestTimeoutMs || settings.timeoutMs || 60000;
+    this.timeoutMs = settings.requestTimeoutMs || settings.timeoutMs || 120000;
     this.analysisTimeoutMs = settings.analysisTimeoutMs || this.timeoutMs;
     this.fetchImpl = settings.fetchImpl || fetch.bind(globalThis);
     this.pairingToken = settings.pairingToken || null;

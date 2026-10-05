@@ -1,5 +1,8 @@
 export type {
   AnalysisStatus,
+  AnalysisResponse,
+  JobResponse,
+  JobStatusCode,
   Quality,
   ConfidenceLevel,
   InputTypeCode as AnalysisInputType,
@@ -16,6 +19,7 @@ export type ConnectionCredentials = {
 };
 
 export type ExtensionSettings = ConnectionCredentials & {
+  settingsVersion?: number;
   defaultDeepCheck: boolean;
   defaultMaxLength: number;
   requestTimeoutMs: number;

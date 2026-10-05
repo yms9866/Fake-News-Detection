@@ -1,0 +1,14 @@
+{
+  "cleaning_mode": "training",
+  "test_csv": "/content/drive/MyDrive/fakemodel/datasets/backup/test.csv",
+  "has_title_column": true,
+  "number_of_examples": 3910,
+  "remaining_marker_counts": {
+    "url": 0,
+    "reuters": 0,
+    "bracketed_media_marker": 613,
+    "leading_media_label": 39,
+    "trailing_media_label": 325,
+    "trailing_category_label": 0
+  }
+}

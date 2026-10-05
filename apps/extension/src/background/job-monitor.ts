@@ -1,5 +1,11 @@
-import { CLIENT_STATES } from "../shared/constants.js";
+import { CLIENT_STATES, JOB_POLL_ATTEMPTS } from "../shared/constants.js";
 import { EXTENSION_ERROR_CODES, ExtensionError } from "../shared/errors.js";
+import {
+  compactClaims,
+  compactGeminiEvidence,
+  compactSearchSummary,
+  compactSources
+} from "../ui/evidence.js";
 import {
   clearActiveAnalysis,
   getActiveAnalysis,
@@ -9,6 +15,7 @@ import {
 } from "../shared/storage.js";
 import { createApiClient } from "../shared/api-client.js";
 import { logEvent } from "../shared/telemetry.js";
+import { clientStateFromJob, showSummaryOverlay } from "./tab-helpers.js";
 
 const activePollers = new Map();
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
@@ -46,55 +53,72 @@ export async function monitorJob(jobId) {
 async function pollUntilTerminal(jobId) {
   const settings = await getSettings();
   const client = createApiClient(settings);
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    const job = await client.getJob(jobId);
-    await saveActiveAnalysis({
-      analysisId: job.analysis_id,
-      jobId: job.job_id,
-      clientState: TERMINAL.has(job.status) ? job.status : CLIENT_STATES.processing,
-      backendJobStatus: job.status,
-      requestId: job.request_id,
-      traceId: job.trace_id
-    });
-    logEvent("job_poll", {
-      clientState: job.status,
-      analysisId: job.analysis_id,
-      jobId: job.job_id,
-      requestId: job.request_id,
-      traceId: job.trace_id
-    });
-    if (job.status === "completed") {
-      const result = await client.getAnalysis(job.analysis_id);
-      const summary = summarizeAnalysis(result, job);
-      if (settings.storeLatestAnalysisReference) {
+  try {
+    for (let attempt = 0; attempt < JOB_POLL_ATTEMPTS; attempt += 1) {
+      const job = await client.getJob(jobId);
+      await saveActiveAnalysis({
+        analysisId: job.analysis_id,
+        jobId: job.job_id,
+        clientState: TERMINAL.has(job.status) ? clientStateFromJob(job.status) : CLIENT_STATES.processing,
+        backendJobStatus: job.status,
+        requestId: job.request_id,
+        traceId: job.trace_id
+      });
+      logEvent("job_poll", {
+        clientState: job.status,
+        analysisId: job.analysis_id,
+        jobId: job.job_id,
+        requestId: job.request_id,
+        traceId: job.trace_id
+      });
+      if (job.status === "completed") {
+        const result = await client.getAnalysis(job.analysis_id);
+        const summary = summarizeAnalysis(result, job);
         await saveLatestSummary(summary);
+        await clearActiveAnalysis();
+        if (settings.showOverlayAutomatically) {
+          try {
+            await showSummaryOverlay(summary);
+          } catch {
+            /* overlay is best-effort after a background job */
+          }
+        }
+        return { job, result, summary };
       }
-      await clearActiveAnalysis();
-      return { job, result, summary };
+      if (job.status === "failed") {
+        throw new ExtensionError(
+          job.error && job.error.code ? job.error.code : EXTENSION_ERROR_CODES.jobFailed,
+          job.error && job.error.message ? job.error.message : "Analysis job failed.",
+          { requestId: job.request_id, traceId: job.trace_id }
+        );
+      }
+      if (job.status === "cancelled") {
+        throw new ExtensionError(
+          EXTENSION_ERROR_CODES.jobCancelled,
+          "Analysis job was cancelled.",
+          { requestId: job.request_id, traceId: job.trace_id }
+        );
+      }
+      await sleep(1000);
     }
-    if (job.status === "failed") {
-      throw new ExtensionError(
-        job.error && job.error.code ? job.error.code : EXTENSION_ERROR_CODES.jobFailed,
-        job.error && job.error.message ? job.error.message : "Analysis job failed.",
-        { requestId: job.request_id, traceId: job.trace_id }
-      );
-    }
-    if (job.status === "cancelled") {
-      throw new ExtensionError(
-        EXTENSION_ERROR_CODES.jobCancelled,
-        "Analysis job was cancelled.",
-        { requestId: job.request_id, traceId: job.trace_id }
-      );
-    }
-    await sleep(1000);
+    throw new ExtensionError(
+      EXTENSION_ERROR_CODES.requestTimeout,
+      "Timed out while waiting for the analysis job to complete."
+    );
+  } catch (error) {
+    await saveActiveAnalysis({
+      jobId,
+      clientState: CLIENT_STATES.failed,
+      backendJobStatus: "failed"
+    });
+    throw error;
   }
-  throw new ExtensionError(
-    EXTENSION_ERROR_CODES.requestTimeout,
-    "Timed out while waiting for the analysis job to complete."
-  );
 }
 
 export function summarizeAnalysis(result, job = null) {
+  const sources = compactSources(result);
+  const searchSummary = compactSearchSummary(result.search_summary);
+  const claims = compactClaims(result.claims);
   return {
     analysisId: result.analysis_id,
     jobId: job ? job.job_id : undefined,
@@ -103,12 +127,13 @@ export function summarizeAnalysis(result, job = null) {
     styleSignal: result.style_signal,
     styleText: result.style_assessment ? result.style_assessment.display_text : "",
     styleConfidence: result.style_assessment ? result.style_assessment.display_confidence : "",
-    claimCount: Array.isArray(result.claims) ? result.claims.length : 0,
-    qualifyingSourceCount: result.search_summary
-      ? result.search_summary.qualifying_source_count
+    claimCount: claims.length,
+    claims,
+    qualifyingSourceCount: searchSummary
+      ? searchSummary.qualifyingSourceCount
       : result.verification
         ? result.verification.qualifying_source_count
-        : 0,
+        : sources.filter((item) => item.qualification === "qualifies").length,
     styleScopeReliable: Boolean(result.style_scope_reliable),
     finalVerdict: result.final_verdict,
     confidence: result.confidence,
@@ -117,11 +142,10 @@ export function summarizeAnalysis(result, job = null) {
         ? "failed"
         : "completed"
       : "not_run",
-    sourceCount: Array.isArray(result.sources)
-      ? result.sources.length
-      : result.verification
-        ? result.verification.evidence.length
-        : 0,
+    sourceCount: sources.length,
+    sources,
+    searchSummary,
+    geminiEvidence: compactGeminiEvidence(result),
     warnings: result.warnings || [],
     reason: result.reason
   };

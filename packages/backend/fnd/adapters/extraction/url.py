@@ -20,6 +20,7 @@ class UrlArticleExtractor:
         fetched = self.fetcher.fetch(url)
 
         soup = BeautifulSoup(fetched.text, "html.parser")
+        title = _page_title(soup)
         for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
             tag.decompose()
 
@@ -29,6 +30,9 @@ class UrlArticleExtractor:
         if not extracted_text:
             body_text = soup.get_text(" ", strip=True)
             extracted_text = normalize_text(body_text)
+
+        if title and title.lower() not in extracted_text.lower():
+            extracted_text = normalize_text(f"{title}. {extracted_text}")
 
         if not extracted_text:
             raise ExtractionError(
@@ -43,5 +47,17 @@ class UrlArticleExtractor:
                 "url": url,
                 "final_url": fetched.final_url,
                 "content_type": fetched.content_type,
+                "title": title,
             },
         )
+
+
+def _page_title(soup) -> str:
+    if soup.title and soup.title.string:
+        title = normalize_text(str(soup.title.string))
+        if title:
+            return title
+    heading = soup.find("h1")
+    if heading is not None:
+        return normalize_text(heading.get_text(" ", strip=True))
+    return ""

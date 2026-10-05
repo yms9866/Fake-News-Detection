@@ -25,6 +25,7 @@ from packages.backend.fnd.domain.entities import (
 from packages.backend.fnd.domain.enums import (
     EvidenceQuality,
     FinalVerdict,
+    InputType,
     StyleRiskSignal,
 )
 from packages.backend.fnd.domain.errors import UnsupportedInputError
@@ -38,6 +39,34 @@ from packages.backend.fnd.ports.search import SearchProvider
 from packages.backend.fnd.ports.style_model import StyleModelProvider
 
 logger = logging.getLogger(__name__)
+
+# Grounded search works on a compact claim, not a full scraped article.
+SEARCH_CLAIM_MAX_CHARS = 3500
+
+
+def search_claim_text(
+    document: ExtractedDocument, max_chars: int = SEARCH_CLAIM_MAX_CHARS
+) -> str:
+    """Build a searchable claim from extracted text without sending the whole page."""
+
+    text = _truncate_claim(normalize_text(document.text), max_chars)
+    source = str(document.metadata.get("url") or document.source or "").strip()
+    if document.input_type == InputType.URL and source.startswith(
+        ("http://", "https://")
+    ):
+        return f"Source URL: {source}\n\n{text}"
+    return text
+
+
+def _truncate_claim(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    for delimiter in (". ", "? ", "! "):
+        index = truncated.rfind(delimiter)
+        if index >= max_chars // 2:
+            return truncated[: index + 1].strip()
+    return truncated.rsplit(" ", 1)[0].strip() or truncated.strip()
 
 
 def _log_timing(event: str, **fields: float | str) -> None:
@@ -88,7 +117,7 @@ class AnalyzeContentWorkflow:
                 )
                 deep_future = pool.submit(
                     self._run_deep_check,
-                    document.text,
+                    document,
                     max_results,
                 )
                 style, style_ms = style_future.result()
@@ -142,7 +171,7 @@ class AnalyzeContentWorkflow:
         return style, (perf_counter() - started) * 1000
 
     def _run_deep_check(
-        self, text: str, max_results: int
+        self, document: ExtractedDocument, max_results: int
     ) -> tuple[
         SearchContext,
         EvidenceAnalysis,
@@ -150,17 +179,18 @@ class AnalyzeContentWorkflow:
         float,
         float,
     ]:
+        claim_text = search_claim_text(document)
         search_start = perf_counter()
         if self.evidence_review_pipeline is not None:
             reviewed = self.evidence_review_pipeline.review(
-                text=text,
+                text=claim_text,
                 max_results=max_results,
             )
             claims = reviewed.claims
             search_context = reviewed.search_context
         else:
             search_context = self.search_provider.search(
-                claim_text=text,
+                claim_text=claim_text,
                 max_results=max_results,
             )
             claims = ()
@@ -168,7 +198,7 @@ class AnalyzeContentWorkflow:
 
         evidence_start = perf_counter()
         evidence = self.evidence_provider.verify(
-            claim_text=text,
+            claim_text=claim_text,
             search_context=search_context,
         )
         evidence_ms = (perf_counter() - evidence_start) * 1000

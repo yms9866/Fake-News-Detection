@@ -486,7 +486,7 @@ export function SettingsScreen({ settings, models, onSave }: { settings: { backe
             <label>
               <span style={{ fontWeight: 500, color: "var(--text-primary)" }}>Request Timeout (ms)</span>
               <input type="number" value={timeoutMs} onChange={(e) => setTimeoutMs(e.target.value)} />
-              <span className="muted" style={{ fontSize: 12, marginTop: 4, display: "block" }}>Maximum time to wait for the backend to respond.</span>
+              <span className="muted" style={{ fontSize: 12, marginTop: 4, display: "block" }}>Maximum time to wait for the backend, including Google Search grounding. Deep check often needs 60–120 seconds.</span>
             </label>
           </div>
         </section>
@@ -513,7 +513,7 @@ export function SettingsScreen({ settings, models, onSave }: { settings: { backe
         </section>
 
         <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 8 }}>
-          <button className="button primary" onClick={() => onSave({ backendOrigin: origin, defaultDeepCheck: deepCheck, defaultMaxLength: Number(maxLength) || 512, requestTimeoutMs: Number(timeoutMs) || 60000 })}>
+          <button className="button primary" onClick={() => onSave({ backendOrigin: origin, defaultDeepCheck: deepCheck, defaultMaxLength: Number(maxLength) || 512, requestTimeoutMs: Number(timeoutMs) || 120000 })}>
             Save Settings
           </button>
         </div>

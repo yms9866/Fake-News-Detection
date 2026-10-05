@@ -146,6 +146,10 @@ function renderSearchSummary(searchSummary: any) {
   }
   
   const queries = Array.isArray(searchSummary.queries) ? searchSummary.queries.slice(0, 6) : [];
+  const limitations = Array.isArray(searchSummary.limitations) ? searchSummary.limitations : [];
+  const failed = limitations.some((item: string) =>
+    /not run|could not be completed|failed/i.test(String(item || ""))
+  );
   
   return (
     <div className="panel search-panel">
@@ -164,8 +168,13 @@ function renderSearchSummary(searchSummary: any) {
           ))}
         </ul>
       )}
-      {Array.isArray(searchSummary.limitations) && searchSummary.limitations.length > 0 && (
-        <p className="muted" style={{ marginTop: 10 }}>{textOnly(searchSummary.limitations.join(" "))}</p>
+      {failed && queries.length === 0 ? (
+        <p className="muted" style={{ marginTop: 10 }}>
+          Web search did not return grounded sources. Check GEMINI_API_KEY and try again with Search for supporting evidence enabled.
+        </p>
+      ) : null}
+      {limitations.length > 0 && (
+        <p className="muted" style={{ marginTop: 10 }}>{textOnly(limitations.join(" "))}</p>
       )}
     </div>
   );

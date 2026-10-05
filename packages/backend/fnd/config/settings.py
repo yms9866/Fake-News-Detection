@@ -52,6 +52,7 @@ class Settings:
     enable_external_ai: bool
     max_url_bytes: int
     request_timeout_seconds: float
+    gemini_timeout_seconds: float = 90.0
     media_upload_directory: Path = Path(tempfile.gettempdir()) / "fnd-media" / "uploads"
     media_temp_directory: Path = Path(tempfile.gettempdir()) / "fnd-media" / "work"
     max_image_size_mb: int = 10
@@ -118,6 +119,9 @@ class Settings:
             max_url_bytes=int(os.environ.get("MAX_URL_BYTES", str(2_000_000))),
             request_timeout_seconds=float(
                 os.environ.get("REQUEST_TIMEOUT_SECONDS", "20")
+            ),
+            gemini_timeout_seconds=float(
+                os.environ.get("GEMINI_TIMEOUT_SECONDS", "90")
             ),
             media_upload_directory=upload_directory.resolve(),
             media_temp_directory=temp_directory.resolve(),

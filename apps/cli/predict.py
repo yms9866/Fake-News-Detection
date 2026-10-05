@@ -73,6 +73,7 @@ def main() -> None:
         enable_external_ai=settings.enable_external_ai,
         max_url_bytes=settings.max_url_bytes,
         request_timeout_seconds=settings.request_timeout_seconds,
+        gemini_timeout_seconds=settings.gemini_timeout_seconds,
     )
 
     workflow = build_cli_analyze_content_workflow(settings)

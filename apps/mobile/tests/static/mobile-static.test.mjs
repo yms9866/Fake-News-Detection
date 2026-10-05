@@ -69,10 +69,21 @@ test("mobile source does not implement verdict policy", async () => {
 
 test("mobile app accepts an Expo public API URL", async () => {
   const app = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const analyze = await readFile(new URL("../../src/screens/AnalyzeScreen.tsx", import.meta.url), "utf8");
+  const workspace = await readFile(new URL("../../src/hooks/useWorkspace.tsx", import.meta.url), "utf8");
   const config = await readFile(new URL("../../src/config/api.ts", import.meta.url), "utf8");
   assert.equal(config.includes("EXPO_PUBLIC_API_URL"), true);
   assert.equal(config.includes("10.0.2.2:8000"), true);
-  assert.equal(app.includes("MobileApiClient"), true);
+  assert.equal(workspace.includes("MobileApiClient"), true);
+  assert.equal(analyze.includes("useWorkspace"), true);
+  assert.equal(app.includes("AppNavigator"), true);
+});
+
+test("mobile app exposes the same verify menus as web", async () => {
+  const nav = await readFile(new URL("../../src/navigation/nav-items.ts", import.meta.url), "utf8");
+  for (const route of ["analyze", "media", "capture", "live", "result", "history", "report", "review", "settings", "diagnostics"]) {
+    assert.equal(nav.includes(`"${route}"`), true);
+  }
 });
 
 test("mobile app config allows local HTTP backend on Android", async () => {

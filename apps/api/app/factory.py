@@ -50,11 +50,14 @@ def create_app(
         allow_origins=origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
+        allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
         allow_headers=[
             "Content-Type",
             "Idempotency-Key",
             "X-Request-ID",
             "X-Trace-ID",
+            "X-FND-Pairing-Token",
+            "X-Pairing-Token",
         ],
         expose_headers=["X-Request-ID", "X-Trace-ID"],
     )

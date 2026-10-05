@@ -18,6 +18,7 @@ from packages.backend.fnd.adapters.models.modernbert import ModernBertStyleModel
 from packages.backend.fnd.application.services.verdict_policy import VerdictPolicy
 from packages.backend.fnd.application.workflows.analyze_content import (
     AnalyzeContentWorkflow,
+    search_claim_text,
 )
 from apps.api.app.state import ApiContainer, InMemoryAnalysisRepository, ModelRegistry
 from packages.backend.fnd.config.settings import Settings
@@ -204,6 +205,63 @@ class AnalyzeContentParallelTests(unittest.TestCase):
         result = workflow.analyze_document(document=document, deep_check=False)
         self.assertNotIn("search_and_source_review", result.timings_ms)
         self.assertIsNone(result.evidence)
+
+
+class SearchClaimTextTests(unittest.TestCase):
+    def test_url_articles_send_a_compact_search_claim(self) -> None:
+        class RecordingSearchProvider:
+            def __init__(self) -> None:
+                self.claims: list[str] = []
+
+            def search(self, claim_text: str, max_results: int) -> SearchContext:
+                del max_results
+                self.claims.append(claim_text)
+                return SearchContext(query=claim_text, raw_context="recorded")
+
+        class FastStyleModel:
+            def analyze(self, text: str, max_length: int) -> StyleAnalysis:
+                return StyleAnalysis.from_prediction(
+                    signal=StyleRiskSignal.LOW,
+                    confidence=0.9,
+                    text=text,
+                    model_name="fast-style",
+                    max_length=max_length,
+                )
+
+        search = RecordingSearchProvider()
+        workflow = AnalyzeContentWorkflow(
+            text_extractor=DirectTextExtractor(),
+            url_extractor=FakeUrlExtractor(),
+            file_extractor=FakeFileExtractor(),
+            style_model=FastStyleModel(),
+            search_provider=search,
+            evidence_provider=InstantEvidenceProvider(),
+            verdict_policy=VerdictPolicy(),
+        )
+        document = ExtractedDocument(
+            input_type=InputType.URL,
+            text=("The minister resigned after an inquiry. " * 400),
+            source="https://news.example/article",
+            metadata={"url": "https://news.example/article"},
+        )
+        workflow.analyze_document(document=document, deep_check=True)
+
+        self.assertEqual(len(search.claims), 1)
+        claim = search.claims[0]
+        self.assertTrue(claim.startswith("Source URL: https://news.example/article"))
+        self.assertLess(len(claim), 4200)
+        self.assertNotEqual(claim, document.text)
+
+    def test_search_claim_text_keeps_short_direct_text(self) -> None:
+        document = ExtractedDocument(
+            input_type=InputType.DIRECT_TEXT,
+            text="A short factual claim for testing.",
+            source="direct-text",
+        )
+        self.assertEqual(
+            search_claim_text(document),
+            "A short factual claim for testing.",
+        )
 
 
 class StyleModelWarmupTests(unittest.TestCase):
@@ -403,6 +461,25 @@ class GeminiRunCacheTests(unittest.TestCase):
         expired.set("a", SimpleNamespace(name="a"))  # type: ignore[arg-type]
         sleep(0.02)
         self.assertIsNone(expired.get("a"))
+
+
+class GeminiTimeoutWiringTests(unittest.TestCase):
+    def test_bootstrap_uses_gemini_timeout_not_page_fetch_timeout(self) -> None:
+        from packages.backend.fnd.application.bootstrap import (
+            build_analyze_content_workflow,
+        )
+
+        with TemporaryDirectory() as tmp:
+            settings = _settings(Path(tmp))
+            with patch(
+                "packages.backend.fnd.application.bootstrap.GeminiGroundedSearchEvidenceProvider"
+            ) as gemini:
+                gemini.return_value = InstantEvidenceProvider()
+                build_analyze_content_workflow(settings)
+
+        self.assertEqual(settings.request_timeout_seconds, 1.0)
+        self.assertEqual(settings.gemini_timeout_seconds, 90.0)
+        self.assertEqual(gemini.call_args.kwargs["timeout_seconds"], 90.0)
 
 
 if __name__ == "__main__":

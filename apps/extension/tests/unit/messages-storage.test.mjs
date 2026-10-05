@@ -33,5 +33,19 @@ test("clear-state removes lightweight analysis references", async () => {
   assert.equal(memoryStorageForTests.memorySession.has("fnd.activeAnalysis"), false);
   assert.equal(memoryStorageForTests.memoryLocal.has("fnd.latestSummary"), false);
   assert.equal((await getSettings()).backendOrigin, "http://127.0.0.1:8000");
+  assert.equal((await getSettings()).defaultDeepCheck, true);
+  assert.equal((await getSettings()).requestTimeoutMs, 120000);
+});
+
+test("old stored settings enable deep check and a longer timeout", async () => {
+  memoryStorageForTests.memoryLocal.set("fnd.settings", {
+    backendOrigin: "http://127.0.0.1:8000",
+    defaultDeepCheck: false,
+    requestTimeoutMs: 60000
+  });
+  const settings = await getSettings();
+  assert.equal(settings.defaultDeepCheck, true);
+  assert.equal(settings.requestTimeoutMs, 120000);
+  assert.equal(settings.settingsVersion, 2);
 });
 

@@ -30,4 +30,25 @@ export class MobileApiClient extends FndApiClient {
   getHealth() {
     return this.live();
   }
+
+  uploadMediaUri(
+    mediaType: "image" | "audio" | "video",
+    file: { uri: string; name: string; mimeType?: string },
+    options: { deepCheck?: boolean; maxLength?: number; idempotencyKey?: string } = {}
+  ) {
+    const form = new FormData();
+    form.append("file", {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType || `${mediaType}/*`
+    } as unknown as Blob);
+    form.append("deep_check", String(Boolean(options.deepCheck)));
+    form.append("max_length", String(options.maxLength || 512));
+    return this.requestJson(`/v1/analyses/${mediaType}`, {
+      method: "POST",
+      body: form,
+      headers: options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {},
+      timeoutMs: this.analysisTimeoutMs
+    });
+  }
 }

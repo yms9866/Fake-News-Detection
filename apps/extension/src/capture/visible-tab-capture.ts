@@ -8,7 +8,7 @@ export async function captureVisibleTabOnce() {
       "Visible-tab capture is unavailable in this browser context."
     );
   }
-  const dataUrl = await chrome.tabs.captureVisibleTab({ format: "png" });
+  const dataUrl = await chrome.tabs.captureVisibleTab(undefined, { format: "png" });
   return await dataUrlToBlob(dataUrl);
 }
 
@@ -27,6 +27,6 @@ export async function dataUrlToBlob(dataUrl) {
       "Captured screenshot exceeds the configured upload limit."
     );
   }
-  return blob;
+  return new File([blob], "visible-tab.png", { type: blob.type || "image/png" });
 }
 

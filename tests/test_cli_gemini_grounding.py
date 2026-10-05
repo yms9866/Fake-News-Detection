@@ -320,6 +320,18 @@ class GroundingRedirectHelperTests(unittest.TestCase):
         self.assertNotIn("secret provider response", evidence.error or "")
         self.assertIn("RuntimeError", evidence.error or "")
 
+    def test_http_failures_keep_a_safe_status_detail(self) -> None:
+        def failing_transport(*_):
+            raise RuntimeError("HTTP_429: Resource has been exhausted")
+
+        provider = GeminiGroundedSearchEvidenceProvider(
+            api_key="test-key",
+            transport=failing_transport,
+        )
+        evidence = provider.verify("Example claim", provider.search("Example claim", 6))
+        self.assertIn("HTTP_429", evidence.error or "")
+        self.assertIn("Resource has been exhausted", evidence.error or "")
+
 
 if __name__ == "__main__":
     unittest.main()

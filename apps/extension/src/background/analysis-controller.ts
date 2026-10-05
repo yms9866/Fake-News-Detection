@@ -7,6 +7,7 @@ import {
   safeErrorPayload
 } from "../shared/errors.js";
 import {
+  clearActiveAnalysis,
   getActiveAnalysis,
   getLatestSummary,
   getSettings,
@@ -16,6 +17,7 @@ import {
 import { createApiClient } from "../shared/api-client.js";
 import { logEvent } from "../shared/telemetry.js";
 import { monitorJob, persistAcceptedJob, summarizeAnalysis } from "./job-monitor.js";
+import { ensureContentScript, getActiveTab, showSummaryOverlay } from "./tab-helpers.js";
 
 export async function analyzeSelection(payload = {}) {
   const extraction = payload.text
@@ -65,9 +67,7 @@ export async function analyzeUrl(payload = {}) {
     deep_check: settings.defaultDeepCheck,
     max_length: settings.defaultMaxLength
   });
-  const summary = summarizeAnalysis(result);
-  await saveLatestSummary(summary);
-  return { ok: true, result, summary };
+  return await persistCompletedAnalysis(result, settings, []);
 }
 
 export async function analyzeVisibleTab() {
@@ -78,6 +78,7 @@ export async function analyzeVisibleTab() {
     const accepted = await client.uploadImage(blob, {
       deepCheck: settings.defaultDeepCheck,
       maxLength: settings.defaultMaxLength,
+      filename: "visible-tab.png",
       idempotencyKey: makeIdempotencyKey("visible-tab")
     });
     const reference = await persistAcceptedJob(accepted);
@@ -115,24 +116,49 @@ export async function getAnalysisState() {
   };
 }
 
+export async function getLatestReport() {
+  const latest = await getLatestSummary();
+  if (!latest) {
+    return { ok: false, error: { code: "NO_RESULT", message: "No latest report is available." } };
+  }
+  return { ok: true, latest: await hydrateLatestSummary(latest) };
+}
+
+async function hydrateLatestSummary(latest) {
+  const hasSources = Array.isArray(latest.sources) && latest.sources.length > 0;
+  const hasSearch = Boolean(latest.searchSummary);
+  if ((hasSources && hasSearch) || !latest.analysisId) {
+    return latest;
+  }
+  try {
+    const { client } = await configuredClient();
+    const result = await client.getAnalysis(latest.analysisId);
+    const summary = summarizeAnalysis(result);
+    const settings = await getSettings();
+    if (settings.storeLatestAnalysisReference) {
+      await saveLatestSummary(summary);
+    }
+    return summary;
+  } catch {
+    return latest;
+  }
+}
+
 export async function showLatestOverlay() {
   const latest = await getLatestSummary();
   if (!latest) {
     return { ok: false, error: { code: "NO_RESULT", message: "No latest result is available." } };
   }
-  const tab = await getActiveTab();
-  await ensureContentScript(tab.id);
-  await chrome.tabs.sendMessage(tab.id, { type: MESSAGE_TYPES.showOverlay, payload: latest });
+  await showSummaryOverlay(latest);
   return { ok: true };
 }
 
-export async function openLatestReport() {
-  const latest = await getLatestSummary();
-  if (!latest) {
-    return { ok: false, error: { code: "NO_RESULT", message: "No latest report is available." } };
+export async function openLatestReport(payload = {}) {
+  if (payload && payload.summary) {
+    await saveLatestSummary(payload.summary);
   }
   await chrome.tabs.create({ url: chrome.runtime.getURL("report/report.html") });
-  return { ok: true, latest };
+  return { ok: true, latest: await getLatestSummary() };
 }
 
 export async function runControllerAction(action, payload = {}) {
@@ -167,27 +193,22 @@ async function submitText(text, source, warnings = []) {
     deep_check: settings.defaultDeepCheck,
     max_length: settings.defaultMaxLength
   });
-  const summary = summarizeAnalysis(result);
-  summary.warnings = [...(summary.warnings || []), ...warnings];
-  if (settings.storeLatestAnalysisReference) {
-    await saveLatestSummary(summary);
-  }
-  await saveActiveAnalysis({
-    analysisId: result.analysis_id,
-    clientState: CLIENT_STATES.completed,
-    requestId: result.request_id,
-    traceId: result.trace_id
-  });
-  if (settings.showOverlayAutomatically) {
-    await showSummaryOverlay(summary);
-  }
-  return { ok: true, result, summary };
+  return await persistCompletedAnalysis(result, settings, warnings);
 }
 
-async function showSummaryOverlay(summary) {
-  const tab = await getActiveTab();
-  await ensureContentScript(tab.id);
-  await chrome.tabs.sendMessage(tab.id, { type: MESSAGE_TYPES.showOverlay, payload: summary });
+async function persistCompletedAnalysis(result, settings, warnings = []) {
+  const summary = summarizeAnalysis(result);
+  summary.warnings = [...(summary.warnings || []), ...warnings];
+  await saveLatestSummary(summary);
+  await clearActiveAnalysis();
+  if (settings.showOverlayAutomatically) {
+    try {
+      await showSummaryOverlay(summary);
+    } catch {
+      /* overlay is best-effort after a completed analysis */
+    }
+  }
+  return { ok: true, result, summary };
 }
 
 async function extractFromActiveTab(type) {
@@ -201,22 +222,6 @@ async function extractFromActiveTab(type) {
   }
   await ensureContentScript(tab.id);
   return await chrome.tabs.sendMessage(tab.id, { type });
-}
-
-async function getActiveTab() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
-  if (!tab || !tab.id) {
-    throw new ExtensionError(EXTENSION_ERROR_CODES.invalidPage, "No active tab is available.");
-  }
-  return tab;
-}
-
-async function ensureContentScript(tabId) {
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ["content/content-script.js"]
-  });
 }
 
 async function configuredClient() {

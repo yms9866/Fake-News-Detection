@@ -87,7 +87,10 @@ export function registerIpcHandlers({ ipc = ipcMain, backendManager, captureCont
     });
   }
 
-  handle(ALLOWED_IPC_CHANNELS.backendStatus, () => manager.getStatus());
+  handle(ALLOWED_IPC_CHANNELS.backendStatus, async () => {
+    await manager.detectExisting(settings.getSettings().backendOrigin);
+    return manager.getStatus();
+  });
   handle(ALLOWED_IPC_CHANNELS.backendStart, () => manager.start(settings.getSettings()));
   handle(ALLOWED_IPC_CHANNELS.backendStop, () => manager.stop());
   handle(ALLOWED_IPC_CHANNELS.backendLogs, () => manager.getLogs());
@@ -99,16 +102,17 @@ export function registerIpcHandlers({ ipc = ipcMain, backendManager, captureCont
   handle(ALLOWED_IPC_CHANNELS.historyList, () => history.list());
   handle(ALLOWED_IPC_CHANNELS.historySave, (payload) => history.save(payload));
   handle(ALLOWED_IPC_CHANNELS.historyClear, () => history.clear());
-  handle(ALLOWED_IPC_CHANNELS.diagnosticsGet, () =>
-    collectDiagnostics({
+  handle(ALLOWED_IPC_CHANNELS.diagnosticsGet, async () => {
+    await manager.detectExisting(settings.getSettings().backendOrigin);
+    return collectDiagnostics({
       backendStatus: manager.getStatus(),
       settings: settings.getSettings(),
       capture: {
         captureCount: capture.captureCount,
         framePersisted: capture.hasPersistedFrame()
       }
-    })
-  );
+    });
+  });
   handle(ALLOWED_IPC_CHANNELS.externalOpen, (payload) => openExternalLink(shell, payload.url));
 
   return { manager, capture, settings, history };

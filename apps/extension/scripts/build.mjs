@@ -19,8 +19,15 @@ await mkdir(dirname(join(dist, "manifest.json")), { recursive: true });
 await writeFile(join(dist, "manifest.json"), await readFile(join(root, "manifest.json"), "utf8"), "utf8");
 await cp(join(root, "public"), join(dist, "public"), { recursive: true });
 
-function needsBundle(rel) {
-  return /shared\/api-client\.(ts|tsx)$/u.test(rel.replace(/\\/gu, "/"));
+function bundleKind(rel) {
+  const normalized = rel.replace(/\\/gu, "/");
+  if (/shared\/api-client\.(ts|tsx)$/u.test(normalized)) {
+    return "esm";
+  }
+  if (/content\/content-script\.(ts|tsx)$/u.test(normalized)) {
+    return "iife";
+  }
+  return null;
 }
 
 for (const file of globSync("src/**/*", { cwd: root, nodir: true })) {
@@ -33,15 +40,16 @@ for (const file of globSync("src/**/*", { cwd: root, nodir: true })) {
       continue;
     }
     const out = join(dist, rel).replace(/\.(tsx|ts)$/u, ".js");
-    const bundle = needsBundle(rel);
+    const format = bundleKind(rel) || "esm";
+    const bundle = Boolean(bundleKind(rel));
     await mkdir(dirname(out), { recursive: true });
     await esbuild.build({
       entryPoints: [source],
       outfile: out,
-      format: "esm",
+      format,
       platform: "neutral",
       bundle,
-      alias: bundle ? sdkAlias : undefined,
+      alias: bundle && format === "esm" ? sdkAlias : undefined,
       jsx: "automatic",
       logLevel: "warning"
     });

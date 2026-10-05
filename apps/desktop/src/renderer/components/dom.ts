@@ -20,6 +20,10 @@ export function button(label, onClick, className = "button") {
   return node;
 }
 
+export function primaryButton(label, onClick) {
+  return button(label, onClick, "button primary");
+}
+
 export function field(label, control) {
   const wrapper = div("field");
   const labelNode = el("label", label);

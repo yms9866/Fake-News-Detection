@@ -76,7 +76,10 @@ def _warnings(result: AnalysisResult) -> list[str]:
         warnings.append("Web search failed. Evidence verification may be incomplete.")
 
     if result.evidence is not None and result.evidence.error:
-        warnings.append("Evidence provider failed. The final verdict is UNVERIFIED.")
+        friendly = _friendly_provider_error(result.evidence.error)
+        warnings.append(
+            friendly or "Evidence provider failed. The final verdict is UNVERIFIED."
+        )
 
     for item in _forensic_results(result):
         for warning in item.warnings:
@@ -429,11 +432,23 @@ def _stable_provider_error(error: str | None) -> str | None:
 def _friendly_provider_error(error: str | None) -> str | None:
     if not error:
         return None
+    text = str(error)
     code = _stable_provider_error(error)
     if code == "GEMINI_API_KEY_MISSING":
         return "Gemini evidence analysis is unavailable because the API key is not configured."
     if code == "EXTERNAL_AI_DISABLED":
         return "External evidence analysis is disabled in this environment."
+    if "HTTP_401" in text or "HTTP_403" in text:
+        return "Gemini rejected the API key. Check GEMINI_API_KEY and model access."
+    if "HTTP_404" in text:
+        return "The configured Gemini model was not found. Check GEMINI_MODEL."
+    if "HTTP_429" in text:
+        return "Gemini quota was exceeded. Wait a moment and try again."
+    if "timed out" in text.lower() or "Timeout" in text:
+        return "Gemini search timed out before Google Search grounding finished."
+    if "HTTP_" in text:
+        detail = text.split(":", 1)[-1].strip()
+        return f"Gemini search failed ({detail or 'HTTP error'})."
     return "The evidence service could not complete the review."
 
 

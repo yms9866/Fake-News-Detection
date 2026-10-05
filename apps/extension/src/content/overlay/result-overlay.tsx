@@ -1,7 +1,39 @@
+import type {
+  AnalysisResponse,
+  JobResponse,
+  JobStatusCode,
+  Quality,
+  StyleSignal
+} from "../../shared/contracts.js";
 import { isSafeHttpUrl } from "../metadata-extractor.js";
+import { fallbackStyleText, humanVerification, humanVerdict, renderVerdictCard } from "../../ui/summary.js";
 
-export function summaryFromAnalysis(result, job = null) {
-  const verificationStatus = result.verification
+export type OverlayVerificationStatus = "failed" | "completed" | "checking" | "not_run";
+
+export type ResultOverlaySummary = {
+  analysisId: string;
+  jobId?: string;
+  clientState: string;
+  backendJobStatus?: JobStatusCode;
+  styleSignal: StyleSignal;
+  styleText: string;
+  styleConfidence: string;
+  claimCount: number;
+  qualifyingSourceCount: number;
+  styleScopeReliable: boolean;
+  finalVerdict: string;
+  confidence: Quality;
+  verificationStatus: OverlayVerificationStatus;
+  sourceCount: number;
+  warnings: string[];
+  reason: string;
+};
+
+export function summaryFromAnalysis(
+  result: AnalysisResponse,
+  job: JobResponse | null = null
+): ResultOverlaySummary {
+  const verificationStatus: OverlayVerificationStatus = result.verification
     ? result.verification.error
       ? "failed"
       : "completed"
@@ -36,7 +68,10 @@ export function summaryFromAnalysis(result, job = null) {
   };
 }
 
-export function renderResultOverlay(shadowRoot, summary) {
+export function renderResultOverlay(
+  shadowRoot: ShadowRoot,
+  summary: ResultOverlaySummary
+): HTMLElement {
   while (shadowRoot.firstChild) {
     shadowRoot.removeChild(shadowRoot.firstChild);
   }
@@ -51,78 +86,53 @@ export function renderResultOverlay(shadowRoot, summary) {
   close.className = "fnd-close";
   close.setAttribute("aria-label", "Dismiss analysis result");
   close.textContent = "Close";
-  close.addEventListener("click", () => wrapper.dispatchEvent(new CustomEvent("fnd-dismiss", { bubbles: true })));
+  close.addEventListener("click", () =>
+    wrapper.dispatchEvent(new CustomEvent("fnd-dismiss", { bubbles: true, composed: true }))
+  );
+
+  const kicker = document.createElement("p");
+  kicker.className = "fnd-kicker";
+  kicker.textContent = "Fake News Analysis";
 
   const title = document.createElement("h2");
-  title.textContent = "Analysis result";
-  wrapper.append(title, close);
-  wrapper.append(
-    metric("Style signal strength", summary.styleConfidence || "N/A"),
-    metric("Style assessment", summary.styleText || fallbackStyleText(summary.styleSignal)),
-    metric("Claims checked", String(summary.claimCount || 0)),
-    metric("Gemini evidence analysis", humanVerification(summary.verificationStatus)),
-    metric("Final decision", `${summary.finalVerdict || "UNVERIFIED"} (${summary.confidence || "LOW"})`),
-    metric("Reviewed sources", String(summary.sourceCount || 0)),
-    metric("Qualifying sources", String(summary.qualifyingSourceCount || 0))
+  title.textContent = humanVerdict(summary.finalVerdict);
+  wrapper.append(kicker, title, close);
+
+  const cardHost = document.createElement("div");
+  cardHost.className = "fnd-card-host";
+  const card = renderVerdictCard(
+    {
+      ...summary,
+      styleText: summary.styleText || fallbackStyleText(summary.styleSignal)
+    },
+    { compact: true }
   );
-  if (summary.warnings && summary.warnings.length) {
-    const warning = document.createElement("p");
-    warning.className = "fnd-warning";
-    warning.textContent = summary.warnings.join(" ");
-    wrapper.append(warning);
-  }
-  if (summary.reason) {
-    const reason = document.createElement("p");
-    reason.className = "fnd-reason";
-    reason.textContent = summary.reason;
-    wrapper.append(reason);
-  }
+  cardHost.append(card);
+  wrapper.append(cardHost);
+
+  const footer = document.createElement("div");
+  footer.className = "fnd-footer";
+  const evidence = document.createElement("span");
+  evidence.textContent = humanVerification(summary.verificationStatus);
   const openDetails = document.createElement("button");
   openDetails.type = "button";
   openDetails.className = "fnd-details";
   openDetails.textContent = "Open details";
-  openDetails.addEventListener("click", () => {
-    wrapper.dispatchEvent(new CustomEvent("fnd-open-details", { bubbles: true, detail: summary }));
+  openDetails.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    wrapper.dispatchEvent(
+      new CustomEvent("fnd-open-details", { bubbles: true, composed: true, detail: summary })
+    );
   });
-  wrapper.append(openDetails);
+  footer.append(evidence, openDetails);
+  wrapper.append(footer);
+
   shadowRoot.append(wrapper);
   wrapper.focus();
   return wrapper;
 }
 
-export function safeSourceUrl(url) {
+export function safeSourceUrl(url: string): string {
   return isSafeHttpUrl(url) ? url : "";
-}
-
-function metric(label, value) {
-  const row = document.createElement("p");
-  const strong = document.createElement("strong");
-  strong.textContent = `${label}: `;
-  const text = document.createElement("span");
-  text.textContent = value;
-  row.append(strong, text);
-  return row;
-}
-
-function fallbackStyleText(signal) {
-  if (signal === "LOW_STYLE_RISK") {
-    return "The writing style seems similar to real or legitimate news reporting.";
-  }
-  if (signal === "HIGH_STYLE_RISK") {
-    return "The writing style seems similar to fake, misleading, or fabricated content.";
-  }
-  return "The writing-style assessment is unavailable.";
-}
-
-function humanVerification(value) {
-  if (value === "completed") {
-    return "Completed";
-  }
-  if (value === "checking") {
-    return "Checking";
-  }
-  if (value === "failed") {
-    return "Failed";
-  }
-  return "Not run";
 }

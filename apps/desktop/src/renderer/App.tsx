@@ -1,18 +1,25 @@
 import { createDesktopApiClient } from "./api/client.js";
 import { captureDataUrlToBlob, makeCaptureUploadOptions } from "./capture/capture-model.js";
 import { el } from "./components/dom.js";
+import {
+  renderBrandMark,
+  renderCollapseToggle,
+  renderConnectionStatus,
+  renderThemeToggle
+} from "./components/ui.js";
+import { NAV_ITEMS, labelForRoute } from "./navigation/nav-items.js";
 import { summarizeHistoryItem } from "./components/safe-content.js";
 import { renderActiveJobScreen } from "./screens/active-job-screen.js";
+import { createAnalyzeDraft, renderAnalyzeScreen } from "./screens/analyze-screen.js";
 import { renderCaptureSourceScreen } from "./screens/capture-source-screen.js";
 import { renderDiagnosticsScreen } from "./screens/diagnostics-screen.js";
 import { renderHistoryScreen } from "./screens/history-screen.js";
-import { renderHomeScreen } from "./screens/home-screen.js";
 import { renderLiveOcrScreen } from "./screens/live-ocr-screen.js";
 import { renderMediaUploadScreen } from "./screens/media-upload-screen.js";
-import { renderNewAnalysisScreen } from "./screens/new-analysis-screen.js";
+import { renderReportScreen } from "./screens/report-screen.js";
 import { renderResultScreen } from "./screens/result-screen.js";
+import { renderReviewScreen } from "./screens/review-screen.js";
 import { renderSettingsScreen } from "./screens/settings-screen.js";
-import { renderTextUrlScreen } from "./screens/text-url-screen.js";
 import { createRendererHistoryStore, createRendererSettingsStore } from "./stores/settings-store.js";
 
 const DEFAULT_SETTINGS = {
@@ -22,6 +29,9 @@ const DEFAULT_SETTINGS = {
   requestTimeoutMs: 600000,
   startupTimeoutMs: 300000
 };
+
+const THEME_STORAGE_KEY = "fnd.desktop.theme";
+const SIDEBAR_STORAGE_KEY = "fnd.desktop.sidebarCollapsed";
 
 export class DesktopInitializationError extends Error {
   constructor(code, message) {
@@ -75,12 +85,38 @@ export function renderDesktopInitializationError(root, error) {
   root.append(panel);
 }
 
+function readStoredTheme() {
+  try {
+    const value = globalThis.localStorage?.getItem(THEME_STORAGE_KEY);
+    return value === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+function readStoredSidebarCollapsed() {
+  try {
+    return globalThis.localStorage?.getItem(SIDEBAR_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function applyDocumentTheme(theme) {
+  const rootEl = document.documentElement;
+  rootEl.classList.remove("light", "dark", "light-theme", "dark-theme");
+  rootEl.classList.add(theme, `${theme}-theme`);
+  rootEl.dataset.theme = theme;
+}
+
 export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
   const settingsStore = createRendererSettingsStore(bridge);
   const historyStore = createRendererHistoryStore(bridge);
+  const analyzeDraft = createAnalyzeDraft(DEFAULT_SETTINGS);
   const state = {
-    route: "home",
+    route: "analyze",
     backendState: "unknown",
+    backendReady: false,
     settings: { ...DEFAULT_SETTINGS },
     diagnostics: null,
     history: [],
@@ -90,14 +126,39 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
     liveSession: null,
     latestResult: null,
     loading: false,
-    error: null
+    error: null,
+    theme: readStoredTheme(),
+    sidebarCollapsed: readStoredSidebarCollapsed()
   };
   const client = createDesktopApiClient(state.settings);
+  applyDocumentTheme(state.theme);
 
   const actions = {
     bridge,
+    redraw() {
+      draw();
+    },
     navigate(route) {
       state.route = route;
+      draw();
+    },
+    toggleSidebar() {
+      state.sidebarCollapsed = !state.sidebarCollapsed;
+      try {
+        globalThis.localStorage?.setItem(SIDEBAR_STORAGE_KEY, state.sidebarCollapsed ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      draw();
+    },
+    toggleTheme() {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      applyDocumentTheme(state.theme);
+      try {
+        globalThis.localStorage?.setItem(THEME_STORAGE_KEY, state.theme);
+      } catch {
+        /* ignore */
+      }
       draw();
     },
     async startBackend() {
@@ -105,6 +166,7 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         const response = await bridge.backend.start();
         if (response.ok) {
           state.backendState = response.value.state;
+          state.backendReady = Boolean(response.value.ready);
         }
       });
     },
@@ -114,6 +176,7 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         state.diagnostics = response.ok ? response.value : response.error;
         if (state.diagnostics.backend) {
           state.backendState = state.diagnostics.backend.state;
+          state.backendReady = Boolean(state.diagnostics.backend.ready);
         }
       });
     },
@@ -228,10 +291,21 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         }
       });
     },
+    async openHistory(item) {
+      await run(async () => {
+        if (!item || !item.analysisId) {
+          throw new Error("History item is missing an analysis id.");
+        }
+        state.latestResult = await client.getAnalysis(item.analysisId);
+        state.route = "result";
+      });
+    },
     async saveSettings(settings) {
       await run(async () => {
         state.settings = { ...state.settings, ...(await settingsStore.save(settings)) };
         client.configure(state.settings);
+        analyzeDraft.deepCheck = state.settings.defaultDeepCheck;
+        analyzeDraft.maxLength = String(state.settings.defaultMaxLength);
       });
     },
     async clearHistory() {
@@ -246,6 +320,8 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         state.latestResult = null;
         state.activeJob = null;
         state.liveSession = null;
+        analyzeDraft.deepCheck = state.settings.defaultDeepCheck;
+        analyzeDraft.maxLength = String(state.settings.defaultMaxLength);
       });
     }
   };
@@ -296,43 +372,84 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
     await run(async () => {
       state.settings = { ...DEFAULT_SETTINGS, ...(await settingsStore.get()) };
       client.configure(state.settings);
+      analyzeDraft.deepCheck = state.settings.defaultDeepCheck;
+      analyzeDraft.maxLength = String(state.settings.defaultMaxLength);
       state.history = await historyStore.list();
       await actions.refreshDiagnostics();
     });
   }
 
-  function navButton(label, route) {
+  function navButton(label, route, icon) {
     const node = document.createElement("button");
     node.type = "button";
     node.className = route === state.route ? "nav active" : "nav";
-    node.textContent = label;
+    node.title = label;
+    const iconWrap = document.createElement("div");
+    iconWrap.className = "nav-icon";
+    iconWrap.textContent = icon;
+    node.append(iconWrap);
+    node.append(el("span", label, "nav-label"));
     node.addEventListener("click", () => actions.navigate(route));
     return node;
   }
 
   function draw() {
+    applyDocumentTheme(state.theme);
     root.replaceChildren();
     const layout = document.createElement("main");
+    layout.className = "app-shell";
+
+    const aside = document.createElement("aside");
+    aside.className = state.sidebarCollapsed ? "sidebar collapsed" : "sidebar";
+
+    const sidebarHeader = document.createElement("div");
+    sidebarHeader.className = "sidebar-header";
+    sidebarHeader.append(renderBrandMark(state.sidebarCollapsed));
+    sidebarHeader.append(renderCollapseToggle(state.sidebarCollapsed, actions.toggleSidebar));
+    aside.append(sidebarHeader);
+
     const nav = document.createElement("nav");
-    nav.append(
-      navButton("Home", "home"),
-      navButton("New", "new-analysis"),
-      navButton("Text/URL", "text-url"),
-      navButton("Media", "media"),
-      navButton("Capture", "capture"),
-      navButton("Live OCR", "live-ocr"),
-      navButton("Job", "active-job"),
-      navButton("Result", "result"),
-      navButton("History", "history"),
-      navButton("Settings", "settings"),
-      navButton("Diagnostics", "diagnostics")
-    );
-    layout.append(nav);
+    nav.setAttribute("aria-label", "Primary");
+    for (const section of NAV_ITEMS) {
+      const group = document.createElement("div");
+      group.className = "nav-section";
+      group.append(el("div", section.section, "nav-section-header"));
+      for (const item of section.items) {
+        group.append(navButton(item.label, item.route, item.icon));
+      }
+      nav.append(group);
+    }
+    aside.append(nav);
+    layout.append(aside);
+
     const content = document.createElement("div");
     content.className = "content-shell";
+
+    const header = document.createElement("header");
+    header.className = "top-header";
+    const headerLeft = document.createElement("div");
+    headerLeft.className = "header-left";
+    headerLeft.append(el("span", labelForRoute(state.route), "header-title"));
+    const headerRight = document.createElement("div");
+    headerRight.className = "header-right";
+    headerRight.append(renderThemeToggle(state.theme, actions.toggleTheme));
+    headerRight.append(
+      renderConnectionStatus(
+        { state: state.backendState, ready: state.backendReady },
+        () => void actions.refreshDiagnostics()
+      )
+    );
+    if (!state.backendReady) {
+      headerRight.append(buttonGhost("Start backend", () => void actions.startBackend()));
+    }
+    header.append(headerLeft, headerRight);
+    content.append(header);
+
+    const main = document.createElement("div");
+    main.className = "main-content";
     if (state.error) {
       const alert = document.createElement("section");
-      alert.className = "alert error-panel";
+      alert.className = "error-panel";
       alert.setAttribute("role", "alert");
       alert.append(el("h2", errorTitle(state.error.code)));
       alert.append(el("p", state.error.message));
@@ -345,27 +462,24 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         }
         alert.append(list);
       }
-      content.append(alert);
+      main.append(alert);
     }
     if (state.loading) {
-      content.append(renderLoadingPanel());
+      main.append(renderLoadingPanel());
     }
-    content.append(renderCurrentScreen());
+    main.append(renderCurrentScreen());
+    content.append(main);
     layout.append(content);
     root.append(layout);
   }
 
   function renderCurrentScreen() {
     switch (state.route) {
-      case "new-analysis":
-        return renderNewAnalysisScreen(actions);
-      case "text-url":
-        return renderTextUrlScreen(state, actions);
       case "media":
         return renderMediaUploadScreen(state, actions);
       case "capture":
         return renderCaptureSourceScreen(state, actions);
-      case "live-ocr":
+      case "live":
         return renderLiveOcrScreen(state, actions);
       case "active-job":
         return renderActiveJobScreen(state, actions);
@@ -373,18 +487,31 @@ export function renderDesktopApp(root, bridge = resolveDesktopBridge()) {
         return renderResultScreen(state, actions);
       case "history":
         return renderHistoryScreen(state, actions);
+      case "report":
+        return renderReportScreen(state);
+      case "review":
+        return renderReviewScreen(state, actions);
       case "settings":
         return renderSettingsScreen(state, actions);
       case "diagnostics":
         return renderDiagnosticsScreen(state, actions);
       default:
-        return renderHomeScreen(state, actions);
+        return renderAnalyzeScreen(state, actions, analyzeDraft);
     }
   }
 
   draw();
   hydrate();
   return { state, actions, client };
+}
+
+function buttonGhost(label, onClick) {
+  const node = document.createElement("button");
+  node.type = "button";
+  node.className = "button compact ghost";
+  node.textContent = label;
+  node.addEventListener("click", onClick);
+  return node;
 }
 
 function renderLoadingPanel() {

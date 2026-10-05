@@ -8,6 +8,7 @@ import {
   analyzeVisibleTab,
   cancelActiveJob,
   getAnalysisState,
+  getLatestReport,
   openLatestReport,
   runControllerAction,
   showLatestOverlay
@@ -22,6 +23,7 @@ const handlers = {
   [MESSAGE_TYPES.captureVisibleTab]: analyzeVisibleTab,
   [MESSAGE_TYPES.cancelJob]: cancelActiveJob,
   [MESSAGE_TYPES.getAnalysisState]: getAnalysisState,
+  [MESSAGE_TYPES.getLatestReport]: getLatestReport,
   [MESSAGE_TYPES.showOverlay]: showLatestOverlay,
   [MESSAGE_TYPES.openLatestReport]: openLatestReport,
   [MESSAGE_TYPES.testConnection]: testConnection,
@@ -46,7 +48,17 @@ export async function routeMessage(rawMessage) {
 
 export function registerMessageRouter() {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    void routeMessage(message).then(sendResponse);
+    void routeMessage(message)
+      .then(sendResponse)
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: {
+            code: "INVALID_MESSAGE",
+            message: error && error.message ? String(error.message) : "Unsupported message."
+          }
+        });
+      });
     return true;
   });
 }
